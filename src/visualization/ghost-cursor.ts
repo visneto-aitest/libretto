@@ -59,17 +59,21 @@ export async function ensureGhostCursor(
 	page: Page,
 	options?: GhostCursorOptions,
 ): Promise<void> {
-	if (installedPages.has(page)) return;
-	installedPages.add(page);
-
-	const opts = { ...DEFAULTS, ...options };
+	const existingOpts = (page as any).__librettoGhostCursorOpts as
+		| Required<GhostCursorOptions>
+		| undefined;
+	const opts = { ...DEFAULTS, ...(existingOpts ?? {}), ...options };
 	const initScript = buildInitScript(opts);
+
+	if (!installedPages.has(page)) {
+		installedPages.add(page);
+		await page.addInitScript({ content: initScript });
+	}
 
 	// Store options on the page for later use by move/click
 	(page as any).__librettoGhostCursorOpts = opts;
 
-	await page.addInitScript({ content: initScript });
-	// Also run immediately in case page already has content
+	// Re-run in-page installer so cursor recovers after page.setContent() or DOM resets.
 	try {
 		await page.evaluate(new Function(initScript) as () => void);
 	} catch {

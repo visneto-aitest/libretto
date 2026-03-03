@@ -30,19 +30,25 @@ export async function ensureHighlightLayer(
 	page: Page,
 	options?: HighlightOptions,
 ): Promise<void> {
-	if (installedPages.has(page)) return;
-	installedPages.add(page);
-
-	const zIndex = options?.zIndex ?? HIGHLIGHT_DEFAULTS.zIndex;
+	const existingOpts = (page as any).__librettoHighlightOpts as
+		| { color: string; zIndex: number }
+		| undefined;
+	const zIndex =
+		options?.zIndex ?? existingOpts?.zIndex ?? HIGHLIGHT_DEFAULTS.zIndex;
 	const initScript = buildHighlightInitScript({ zIndex });
 
-	// Store options for later
+	if (!installedPages.has(page)) {
+		installedPages.add(page);
+		await page.addInitScript({ content: initScript });
+	}
+
+	// Store/refresh options for later.
 	(page as any).__librettoHighlightOpts = {
-		color: options?.color ?? HIGHLIGHT_DEFAULTS.color,
+		color: options?.color ?? existingOpts?.color ?? HIGHLIGHT_DEFAULTS.color,
 		zIndex,
 	};
 
-	await page.addInitScript({ content: initScript });
+	// Re-run in-page installer so overlays recover after page.setContent() or DOM resets.
 	try {
 		await page.evaluate(new Function(initScript) as () => void);
 	} catch {

@@ -63,6 +63,10 @@ async function visualizeBeforeAction(
 ): Promise<void> {
 	if (!box) return;
 
+	// Re-ensure overlays in case DOM was replaced (e.g. page.setContent()).
+	await ensureGhostCursor(page);
+	await ensureHighlightLayer(page);
+
 	const centerX = box.x + box.width / 2;
 	const centerY = box.y + box.height / 2;
 

@@ -974,6 +974,7 @@ await new Promise(() => {});
 	const child = spawn("node", ["--input-type=module", "-e", launcherCode], {
 		detached: true,
 		stdio: ["ignore", "ignore", childStderrFd],
+		cwd: join(REPO_ROOT, "packages", "libretto"),
 	});
 	child.unref();
 
@@ -1735,7 +1736,7 @@ function printUsage(): void {
 	console.log(`Usage: libretto-cli <command> [--session <name>]
 
 Commands:
-  open <url> [--headed]   Launch browser and open URL (headless by default)
+  open <url> [--headless] Launch browser and open URL (headed by default)
                           Automatically loads saved profile if available
   run <jobType> [--params <json> | --params-file <path>]  Run a registered local integration job
   save <url|domain>       Save current browser session (cookies, localStorage, etc.)
@@ -1751,7 +1752,7 @@ Options:
                           Built-in sessions: default, dev-server, browser-agent
 
 Examples:
-  libretto-cli open https://linkedin.com --headed
+  libretto-cli open https://linkedin.com
   # ... manually log in ...
   libretto-cli save linkedin.com
   # Next time you open linkedin.com, you'll be logged in automatically
@@ -1936,11 +1937,17 @@ export async function runLibrettoCLI(): Promise<void> {
 
 		switch (command) {
 			case "open": {
-				const headed = args.includes("--headed");
+				const hasHeadedFlag = args.includes("--headed");
+				const hasHeadlessFlag = args.includes("--headless");
+				if (hasHeadedFlag && hasHeadlessFlag) {
+					console.error("Cannot pass both --headed and --headless.");
+					process.exit(1);
+				}
+				const headed = hasHeadedFlag || !hasHeadlessFlag;
 				const url = args.slice(1).find((a) => !a.startsWith("--"));
 				if (!url) {
 					console.error(
-						"Usage: libretto-cli open <url> [--headed] [--session <name>]",
+						"Usage: libretto-cli open <url> [--headless] [--session <name>]",
 					);
 					process.exit(1);
 				}
@@ -2103,6 +2110,22 @@ export async function runLibrettoCLI(): Promise<void> {
 	}
 	await log.flush();
 	process.exit(0);
+}
+
+// Auto-configure LLM client from env vars when running as standalone CLI
+if (!llmClientFactory) {
+	const hasAnyCreds =
+		process.env.GOOGLE_CLOUD_PROJECT ||
+		process.env.GCLOUD_PROJECT ||
+		process.env.ANTHROPIC_API_KEY ||
+		process.env.OPENAI_API_KEY;
+
+	if (hasAnyCreds) {
+		setLLMClientFactory(async (_logger, model) => {
+			const { createLLMClient } = await import("../src/llm/client.js");
+			return createLLMClient(model);
+		});
+	}
 }
 
 runLibrettoCLI();
