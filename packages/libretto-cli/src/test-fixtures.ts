@@ -38,11 +38,16 @@ type CliFixtures = {
 const here = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(here, "../../..");
 const cliEntry = resolve(repoRoot, "packages/libretto-cli/dist/index.js");
+const librettoEntry = resolve(repoRoot, "packages/libretto/dist/index.js");
 
 let didBuild = false;
 
 function ensureBuilt(): void {
-  if (didBuild && existsSync(cliEntry)) return;
+  if (didBuild && existsSync(cliEntry) && existsSync(librettoEntry)) return;
+  if (existsSync(cliEntry) && existsSync(librettoEntry)) {
+    didBuild = true;
+    return;
+  }
   const buildLibretto = spawnSync("pnpm", ["--filter", "libretto", "build"], {
     cwd: repoRoot,
     encoding: "utf8",

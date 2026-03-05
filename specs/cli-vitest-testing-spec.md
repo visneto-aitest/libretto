@@ -61,11 +61,11 @@ Do not refactor or edit `packages/libretto-cli/src/index.ts` in this spec. Tests
 
 ### Phase 3: Add very basic CLI subprocess tests
 
-- [ ] Add tests for `--help`/`help` output.
-- [ ] Add tests for unknown command behavior and non-zero exit code.
-- [ ] Add tests for missing argument usage errors on `open`, `exec`, and `save`.
-- [ ] Add tests for invalid `--session` usage and error messaging.
-- [ ] Success criteria: tests assert both exit code and user-visible stderr/stdout text.
+- [x] Add tests for `--help`/`help` output.
+- [x] Add tests for unknown command behavior and non-zero exit code.
+- [x] Add tests for missing argument usage errors on `open`, `exec`, and `save`.
+- [x] Add tests for invalid `--session` usage and error messaging.
+- [x] Success criteria: tests assert both exit code and user-visible stderr/stdout text.
 
 ### Phase 4: Add deterministic state-driven CLI tests
 
