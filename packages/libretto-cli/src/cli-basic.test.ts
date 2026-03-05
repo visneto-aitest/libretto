@@ -39,6 +39,14 @@ describe("basic CLI subprocess behavior", () => {
     );
   });
 
+  test("fails run by default without --allow-actions", async ({ librettoCli }) => {
+    const result = await librettoCli("run ./integration.ts main");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      "Run is read-only by default. Re-run with '--allow-actions' to execute integration actions.",
+    );
+  });
+
   test("fails save with missing target usage error", async ({ librettoCli }) => {
     const result = await librettoCli("save");
     expect(result.exitCode).toBe(1);
