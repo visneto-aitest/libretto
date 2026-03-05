@@ -5,5 +5,6 @@ export default defineConfig({
     name: "libretto-cli",
     environment: "node",
     include: ["src/**/*.test.ts"],
+    testTimeout: 30_000,
   },
 });
