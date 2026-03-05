@@ -4,14 +4,15 @@
 
 ## Solution overview
 
-Make `open` sessions read-only by default and require explicit opt-in for automation via a new `--allow-actions` flag. Enforce the safety boundary in `exec` so read-only sessions reject execution with a clear remediation message. Apply the same explicit opt-in requirement to `run` so integration execution is blocked by default.
+Make `open` sessions read-only by default and enforce the safety boundary in `exec` and `run` so they reject execution unless the session is explicitly authorized. Add an explicit `session-mode` command so the agent can only switch mode when the user directly approves.
 
 ## Goals
 
 - New `open` sessions default to read-only mode.
-- Users can explicitly opt into interactive automation with a CLI flag.
+- Users can explicitly set session mode (`interactive` or `read-only`) with `session-mode`.
 - `exec` is blocked unless the session is explicitly interactive, including legacy sessions missing mode metadata.
-- `run` is blocked unless `--allow-actions` is explicitly provided.
+- `run` is blocked unless the session is explicitly interactive.
+- Error messages clearly state that only a human can authorize interactive mode.
 - Help/usage and repository docs explain the new default and opt-in path.
 - CLI tests cover both blocked and allowed session modes.
 
@@ -24,7 +25,7 @@ Make `open` sessions read-only by default and require explicit opt-in for automa
 ## Future work
 
 - Add a finer-grained safe mode that allows non-mutating `exec` reads while blocking mutating actions.
-- Add a dedicated command to toggle an existing session between read-only and interactive without reopening.
+- Add a dedicated command to re-lock an interactive session back to read-only mode.
 
 ## Important files/docs/websites for implementation
 
@@ -39,23 +40,24 @@ Make `open` sessions read-only by default and require explicit opt-in for automa
 ### Phase 1: Add session mode state and default read-only open behavior
 
 - [x] Extend CLI session state to store session mode (`read-only` or `interactive`).
-- [x] Add `--allow-actions` flag handling to `open` and default mode to `read-only`.
+- [x] Default `open` to read-only mode.
 - [x] Persist mode when creating or reusing an `open` session.
-- [x] Update `open` usage strings/help output to include the new flag.
-- [x] Success criteria: missing-URL `open` usage output includes `--allow-actions` and new sessions persist read-only mode unless opted in.
+- [x] Update `open` usage strings/help output to keep read-only defaults clear.
+- [x] Success criteria: missing-URL `open` usage output documents read-only-safe invocation and new sessions persist read-only mode unless explicitly authorized.
 
 ### Phase 2: Enforce exec safety boundary
 
 - [x] Add an `exec` guard that rejects execution in read-only sessions before browser interaction.
-- [x] Return a clear error message telling users to re-open with `--allow-actions`.
+- [x] Return a clear error message telling users only a human can authorize interactive mode with `session-mode interactive`.
 - [x] Treat missing session mode metadata as read-only.
+- [x] Allow explicit session permissions to authorize legacy sessions without mode metadata.
 - [x] Success criteria: `exec` exits non-zero in read-only sessions with a deterministic guard message.
 
 ### Phase 3: Cover behavior with subprocess tests and docs
 
 - [x] Add stateful tests for read-only blocked exec, missing-mode blocked exec, and interactive-mode pass-through behavior.
-- [x] Block `run` by default and require `--allow-actions`.
+- [x] Block `run` by default unless the session is explicitly interactive.
 - [x] Update top-level documentation to describe the new default and opt-in behavior.
-- [x] Update Libretto skill docs to reflect required `--allow-actions` usage when actions are intended.
+- [x] Update Libretto skill docs to require explicit user approval before running `session-mode`.
 - [x] Run the CLI Vitest suite to validate changes.
 - [x] Success criteria: `pnpm --filter libretto-cli test` passes.

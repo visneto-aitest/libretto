@@ -97,6 +97,7 @@ const SNAPSHOT_ANALYZER_CONFIG_PATH = join(
   LIBRETTO_DIR,
   "snapshot-config.json",
 );
+const SESSION_PERMISSIONS_PATH = join(LIBRETTO_DIR, "session-permissions.json");
 
 // Migrate legacy .playwriter profiles to .libretto-cli
 const LEGACY_PROFILES_DIR = join(REPO_ROOT, ".playwriter", "profiles");
@@ -152,6 +153,13 @@ const SnapshotAnalyzerConfigSchema = z.object({
 });
 
 type SnapshotAnalyzerConfig = z.infer<typeof SnapshotAnalyzerConfigSchema>;
+
+const SessionPermissionsSchema = z.object({
+  version: z.literal(1),
+  sessions: z.record(z.string(), z.enum(["read-only", "interactive"])),
+});
+
+type SessionPermissions = z.infer<typeof SessionPermissionsSchema>;
 
 const SNAPSHOT_ANALYZER_PRESETS: Record<SnapshotAnalyzerPreset, string[]> = {
   codex: ["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only"],
@@ -392,6 +400,55 @@ function collectSelectorHints(html: string, limit = 120): string[] {
 
 function ensureLibrettoDir(): void {
   mkdirSync(LIBRETTO_DIR, { recursive: true });
+}
+
+function readSessionPermissions(): SessionPermissions {
+  if (!existsSync(SESSION_PERMISSIONS_PATH)) {
+    return { version: 1, sessions: {} };
+  }
+  try {
+    const raw = readFileSync(SESSION_PERMISSIONS_PATH, "utf-8");
+    return SessionPermissionsSchema.parse(JSON.parse(raw));
+  } catch {
+    throw new Error(
+      `Session permissions are invalid at ${SESSION_PERMISSIONS_PATH}.`,
+    );
+  }
+}
+
+function writeSessionPermissions(permissions: SessionPermissions): void {
+  ensureLibrettoDir();
+  writeFileSync(
+    SESSION_PERMISSIONS_PATH,
+    JSON.stringify(permissions, null, 2),
+    "utf-8",
+  );
+}
+
+function getSessionPermissionMode(session: string): "read-only" | "interactive" {
+  const permissions = readSessionPermissions();
+  return permissions.sessions[session] ?? "read-only";
+}
+
+function setSessionPermissionMode(
+  session: string,
+  mode: "read-only" | "interactive",
+): void {
+  const permissions = readSessionPermissions();
+  if (mode === "read-only") {
+    delete permissions.sessions[session];
+  } else {
+    permissions.sessions[session] = mode;
+  }
+  writeSessionPermissions(permissions);
+}
+
+function readOnlySessionError(session: string): string {
+  return (
+    `Session "${session}" is read-only. ` +
+    "Only a human can authorize interactive mode. " +
+    `If you want me to enable it, explicitly tell me to run: libretto-cli session-mode interactive --session ${session}`
+  );
 }
 
 function quoteShellArg(value: string): string {
@@ -1579,10 +1636,9 @@ async function runExec(
     visualize,
   });
   const sessionState = getSessionStateOrThrow(session);
-  if (sessionState.mode !== "interactive") {
-    throw new Error(
-      `Session "${session}" is read-only. Re-open with '--allow-actions' to enable exec.`,
-    );
+  const mode = sessionState.mode ?? getSessionPermissionMode(session);
+  if (mode !== "interactive") {
+    throw new Error(readOnlySessionError(session));
   }
 
   const { browser, context, page } = await connect(session);
@@ -2061,6 +2117,21 @@ export async function runClose(session: string): Promise<void> {
   clearSessionState(session);
   log.info("close-success", { session });
   console.log(`Browser closed (session: ${session}).`);
+}
+
+function runSessionMode(
+  session: string,
+  mode: "read-only" | "interactive",
+): void {
+  setSessionPermissionMode(session, mode);
+  const state = readSessionState(session);
+  if (state) {
+    writeSessionState({
+      ...state,
+      mode,
+    });
+  }
+  console.log(`Session "${session}" is now ${mode}.`);
 }
 
 type NetworkLogEntry = {
@@ -2594,9 +2665,10 @@ function printUsage(): void {
   console.log(`Usage: libretto-cli <command> [--session <name>]
 
 Commands:
-  open <url> [--headless] [--allow-actions] Launch browser and open URL (headed by default)
+  open <url> [--headless] Launch browser and open URL (headed by default)
                           Automatically loads saved profile if available
-  run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]  Run an exported async integration function from a file
+  run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]  Run an exported async integration function from a file
+  session-mode <read-only|interactive>  Set session execution mode
   save <url|domain>       Save current browser session (cookies, localStorage, etc.)
   exec <code> [--visualize]  Execute Playwright typescript code (--visualize enables ghost cursor + highlight)
   snapshot --objective <text> --context <text>  Capture PNG + HTML and analyze with configured analyzer (run snapshot configure first)
@@ -2612,8 +2684,8 @@ Options:
 Examples:
   libretto-cli open https://linkedin.com
   # read-only by default (exec blocked)
-  libretto-cli open https://linkedin.com --allow-actions
-  # exec enabled for this session
+  # if user approves actions:
+  libretto-cli session-mode interactive --session default
   # ... manually log in ...
   libretto-cli save linkedin.com
   # Next time you open linkedin.com, you'll be logged in automatically
@@ -2629,6 +2701,7 @@ Examples:
 
   # Multiple sessions
   libretto-cli open https://site1.com --session test1
+  libretto-cli session-mode interactive --session test1
   libretto-cli open https://site2.com --session test2
   libretto-cli exec "return await page.title()" --session test1
 
@@ -2648,6 +2721,7 @@ Sessions:
 const CLI_COMMANDS = new Set([
   "open",
   "run",
+  "session-mode",
   "save",
   "exec",
   "snapshot",
@@ -2717,12 +2791,12 @@ function parseRunParamsArgs(args: string[]): unknown {
   const { value: inlineParams, args: withoutInline } = extractOption(
     args,
     "--params",
-    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
+    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
   );
   const { value: paramsFile, args: remaining } = extractOption(
     withoutInline,
     "--params-file",
-    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
+    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
   );
 
   if (inlineParams && paramsFile) {
@@ -2754,7 +2828,6 @@ function parseRunParamsArgs(args: string[]): unknown {
     "--headed",
     "--headless",
     "--debug",
-    "--allow-actions",
   ]);
   const unexpected = remaining
     .slice(3)
@@ -2780,7 +2853,7 @@ function parseRunDebugMode(args: string[]): boolean {
   const { value: rawDebug } = extractOption(
     args,
     "--debug",
-    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
+    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
   );
   if (rawDebug === undefined) return true;
   const normalized = rawDebug.trim().toLowerCase();
@@ -2937,19 +3010,22 @@ export async function runLibrettoCLI(): Promise<void> {
       case "open": {
         const hasHeadedFlag = args.includes("--headed");
         const hasHeadlessFlag = args.includes("--headless");
-        const allowActions = args.includes("--allow-actions");
+        if (args.includes("--allow-actions")) {
+          console.error(
+            `--allow-actions is not supported for open. ${readOnlySessionError(session)}`,
+          );
+          process.exit(1);
+        }
         if (hasHeadedFlag && hasHeadlessFlag) {
           console.error("Cannot pass both --headed and --headless.");
           process.exit(1);
         }
         const headed = hasHeadedFlag || !hasHeadlessFlag;
-        const mode: "read-only" | "interactive" = allowActions
-          ? "interactive"
-          : "read-only";
+        const mode = getSessionPermissionMode(session);
         const url = args.slice(1).find((a) => !a.startsWith("--"));
         if (!url) {
           console.error(
-            "Usage: libretto-cli open <url> [--headless] [--allow-actions] [--session <name>]",
+            "Usage: libretto-cli open <url> [--headless] [--session <name>]",
           );
           process.exit(1);
         }
@@ -2966,14 +3042,18 @@ export async function runLibrettoCLI(): Promise<void> {
           exportName.startsWith("--")
         ) {
           console.error(
-            "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
+            "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
           );
           process.exit(1);
         }
-        if (!args.includes("--allow-actions")) {
+        if (args.includes("--allow-actions")) {
           console.error(
-            "Run is read-only by default. Re-run with '--allow-actions' to execute integration actions.",
+            `--allow-actions is not supported for run. ${readOnlySessionError(session)}`,
           );
+          process.exit(1);
+        }
+        if (getSessionPermissionMode(session) !== "interactive") {
+          console.error(readOnlySessionError(session));
           process.exit(1);
         }
         const params = parseRunParamsArgs(args);
@@ -2998,6 +3078,17 @@ export async function runLibrettoCLI(): Promise<void> {
           process.exit(1);
         }
         await runSave(urlOrDomain, session);
+        break;
+      }
+      case "session-mode": {
+        const mode = args[1];
+        if (mode !== "read-only" && mode !== "interactive") {
+          console.error(
+            "Usage: libretto-cli session-mode <read-only|interactive> [--session <name>]",
+          );
+          process.exit(1);
+        }
+        runSessionMode(session, mode);
         break;
       }
       case "exec": {
