@@ -14,8 +14,9 @@ If it's not obvious which element to click or what value to enter, **ask the use
 ## Commands
 
 ```bash
-.bin/libretto-cli open <url> [--headed]     # Launch browser and navigate (headless by default)
+.bin/libretto-cli open <url> [--headed] [--allow-actions]     # Launch browser and navigate (headless by default)
 .bin/libretto-cli exec <code> [--visualize] # Execute Playwright TypeScript code (--visualize enables ghost cursor + highlight)
+.bin/libretto-cli run <integrationFile> <integrationExport> [--allow-actions] # Execute integration actions (blocked unless --allow-actions)
 .bin/libretto-cli snapshot --objective "<what to find>" --context "<situational info>"
 .bin/libretto-cli save <url|domain>         # Save session (cookies, localStorage) to .libretto-cli/profiles/
 .bin/libretto-cli network                   # Show last 20 captured network requests
@@ -25,6 +26,8 @@ If it's not obvious which element to click or what value to enter, **ask the use
 
 All commands accept `--session <name>` for isolated browser instances (default: `default`).
 Built-in sessions: `default`, `dev-server`, `browser-agent`.
+
+`open` and `run` are read-only by default. Use `--allow-actions` when you intentionally want the agent to perform browser actions.
 
 ## Visualize Mode (`--visualize`)
 
@@ -40,7 +43,7 @@ The `state` object persists across `exec` calls within the same session — use 
 
 ```bash
 # Open a page
-.bin/libretto-cli open https://example.com
+.bin/libretto-cli open https://example.com --allow-actions
 
 # Interact with elements
 .bin/libretto-cli exec "await page.locator('button:has-text(\"Sign in\")').click()"
@@ -66,7 +69,7 @@ Profiles persist cookies and localStorage across browser launches. They are save
 
 ```bash
 # Open a site in headed mode so you can log in manually
-.bin/libretto-cli open https://portal.example.com --headed
+.bin/libretto-cli open https://portal.example.com --headed --allow-actions
 
 # ... manually log in in the browser window ...
 
@@ -74,7 +77,7 @@ Profiles persist cookies and localStorage across browser launches. They are save
 .bin/libretto-cli save portal.example.com
 
 # Next time you open this domain, you'll be logged in automatically
-.bin/libretto-cli open https://portal.example.com
+.bin/libretto-cli open https://portal.example.com --allow-actions
 ```
 
 ## Workflow: Interactive Debugging

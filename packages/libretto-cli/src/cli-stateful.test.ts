@@ -150,6 +150,23 @@ describe("state-driven CLI subprocess behavior", () => {
     );
   });
 
+  test("blocks exec when session mode is missing", async ({
+    seedSessionState,
+    librettoCli,
+  }) => {
+    await seedSessionState({
+      session: "legacy-session",
+    });
+
+    const result = await librettoCli(
+      "exec \"return await page.title()\" --session legacy-session",
+    );
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      "Session \"legacy-session\" is read-only. Re-open with '--allow-actions' to enable exec.",
+    );
+  });
+
   test("does not apply read-only guard when session allows actions", async ({
     seedSessionState,
     librettoCli,

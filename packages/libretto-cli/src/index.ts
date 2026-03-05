@@ -1579,7 +1579,7 @@ async function runExec(
     visualize,
   });
   const sessionState = getSessionStateOrThrow(session);
-  if (sessionState.mode === "read-only") {
+  if (sessionState.mode !== "interactive") {
     throw new Error(
       `Session "${session}" is read-only. Re-open with '--allow-actions' to enable exec.`,
     );
@@ -2596,7 +2596,7 @@ function printUsage(): void {
 Commands:
   open <url> [--headless] [--allow-actions] Launch browser and open URL (headed by default)
                           Automatically loads saved profile if available
-  run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]  Run an exported async integration function from a file
+  run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]  Run an exported async integration function from a file
   save <url|domain>       Save current browser session (cookies, localStorage, etc.)
   exec <code> [--visualize]  Execute Playwright typescript code (--visualize enables ghost cursor + highlight)
   snapshot --objective <text> --context <text>  Capture PNG + HTML and analyze with configured analyzer (run snapshot configure first)
@@ -2717,12 +2717,12 @@ function parseRunParamsArgs(args: string[]): unknown {
   const { value: inlineParams, args: withoutInline } = extractOption(
     args,
     "--params",
-    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
+    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
   );
   const { value: paramsFile, args: remaining } = extractOption(
     withoutInline,
     "--params-file",
-    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
+    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
   );
 
   if (inlineParams && paramsFile) {
@@ -2754,6 +2754,7 @@ function parseRunParamsArgs(args: string[]): unknown {
     "--headed",
     "--headless",
     "--debug",
+    "--allow-actions",
   ]);
   const unexpected = remaining
     .slice(3)
@@ -2779,7 +2780,7 @@ function parseRunDebugMode(args: string[]): boolean {
   const { value: rawDebug } = extractOption(
     args,
     "--debug",
-    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
+    "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
   );
   if (rawDebug === undefined) return true;
   const normalized = rawDebug.trim().toLowerCase();
@@ -2965,7 +2966,13 @@ export async function runLibrettoCLI(): Promise<void> {
           exportName.startsWith("--")
         ) {
           console.error(
-            "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]",
+            "Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>] [--allow-actions]",
+          );
+          process.exit(1);
+        }
+        if (!args.includes("--allow-actions")) {
+          console.error(
+            "Run is read-only by default. Re-run with '--allow-actions' to execute integration actions.",
           );
           process.exit(1);
         }

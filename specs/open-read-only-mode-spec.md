@@ -4,13 +4,14 @@
 
 ## Solution overview
 
-Make `open` sessions read-only by default and require explicit opt-in for automation via a new `--allow-actions` flag. Enforce the safety boundary in `exec` so read-only sessions reject execution with a clear remediation message.
+Make `open` sessions read-only by default and require explicit opt-in for automation via a new `--allow-actions` flag. Enforce the safety boundary in `exec` so read-only sessions reject execution with a clear remediation message. Apply the same explicit opt-in requirement to `run` so integration execution is blocked by default.
 
 ## Goals
 
 - New `open` sessions default to read-only mode.
 - Users can explicitly opt into interactive automation with a CLI flag.
-- `exec` is blocked for read-only sessions with actionable error text.
+- `exec` is blocked unless the session is explicitly interactive, including legacy sessions missing mode metadata.
+- `run` is blocked unless `--allow-actions` is explicitly provided.
 - Help/usage and repository docs explain the new default and opt-in path.
 - CLI tests cover both blocked and allowed session modes.
 
@@ -47,11 +48,14 @@ Make `open` sessions read-only by default and require explicit opt-in for automa
 
 - [x] Add an `exec` guard that rejects execution in read-only sessions before browser interaction.
 - [x] Return a clear error message telling users to re-open with `--allow-actions`.
+- [x] Treat missing session mode metadata as read-only.
 - [x] Success criteria: `exec` exits non-zero in read-only sessions with a deterministic guard message.
 
 ### Phase 3: Cover behavior with subprocess tests and docs
 
-- [x] Add stateful tests for read-only blocked exec and interactive-mode pass-through behavior.
+- [x] Add stateful tests for read-only blocked exec, missing-mode blocked exec, and interactive-mode pass-through behavior.
+- [x] Block `run` by default and require `--allow-actions`.
 - [x] Update top-level documentation to describe the new default and opt-in behavior.
+- [x] Update Libretto skill docs to reflect required `--allow-actions` usage when actions are intended.
 - [x] Run the CLI Vitest suite to validate changes.
 - [x] Success criteria: `pnpm --filter libretto-cli test` passes.
