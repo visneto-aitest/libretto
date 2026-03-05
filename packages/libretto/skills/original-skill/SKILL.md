@@ -27,9 +27,10 @@ If it's not obvious which element to click or what value to enter, **ask the use
 ## Commands
 
 ```bash
-libretto-cli open <url> [--headless] [--allow-actions]   # Launch browser and navigate (headed by default)
+libretto-cli open <url> [--headless]   # Launch browser and navigate (headed by default)
 libretto-cli exec <code> [--visualize] # Execute Playwright TypeScript code (--visualize enables ghost cursor + highlight)
-libretto-cli run <integrationFile> <integrationExport> [--allow-actions] # Execute integration actions (blocked unless --allow-actions)
+libretto-cli run <integrationFile> <integrationExport> # Execute integration actions (blocked until session is interactive)
+libretto-cli session-mode <read-only|interactive> [--session <name>] # Set session mode explicitly
 libretto-cli snapshot --objective "<what to find>" --context "<situational info>"
 libretto-cli save <url|domain>         # Save session (cookies, localStorage) to .libretto-cli/profiles/
 libretto-cli network                   # Show last 20 captured network requests
@@ -40,7 +41,16 @@ libretto-cli close                     # Close the browser
 All commands accept `--session <name>` for isolated browser instances (default: `default`).
 Built-in sessions: `default`, `dev-server`, `browser-agent`.
 
-`open` and `run` are read-only by default. Use `--allow-actions` when you intentionally want the agent to perform browser actions.
+`open` and `run` are read-only by default. Only a human can approve interactive mode.
+
+## Interactive Consent Rule
+
+After starting a session with `open` (or when preparing to use `run`), ask:
+"Do you want this session to be interactive?"
+
+- If user says **no**, keep it read-only and use read-only-safe commands (`snapshot`, `network`, `actions`).
+- If user says **yes**, run `libretto-cli session-mode interactive --session <name>` and then proceed with `exec`/`run`.
+- Never change session mode unless the user explicitly approves.
 
 ## Visualize Mode (`--visualize`)
 
@@ -56,7 +66,10 @@ The `state` object persists across `exec` calls within the same session — use 
 
 ```bash
 # Open a page
-libretto-cli open https://example.com --allow-actions
+libretto-cli open https://example.com
+# Ask user if they want interactive mode
+# If yes:
+libretto-cli session-mode interactive --session default
 
 # Interact with elements
 libretto-cli exec "await page.locator('button:has-text(\"Sign in\")').click()"
@@ -82,7 +95,7 @@ Profiles persist cookies and localStorage across browser launches. They are save
 
 ```bash
 # Open a site in headed mode so you can log in manually
-libretto-cli open https://portal.example.com --headed --allow-actions
+libretto-cli open https://portal.example.com --headed
 
 # ... manually log in in the browser window ...
 
@@ -90,7 +103,7 @@ libretto-cli open https://portal.example.com --headed --allow-actions
 libretto-cli save portal.example.com
 
 # Next time you open this domain, you'll be logged in automatically
-libretto-cli open https://portal.example.com --allow-actions
+libretto-cli open https://portal.example.com
 ```
 
 ## Workflow: Interactive Debugging
@@ -100,9 +113,11 @@ When browser automation jobs fail (selectors timing out, clicks not working), us
 1. Add `page.pause()` before the problematic code section
 2. Start the job with `.bin/browser-agent start` (debug mode is always enabled locally)
 3. Wait ~60 seconds for the browser to hit the breakpoint
-4. Use `libretto-cli exec` (with `--session browser-agent`) to inspect and prototype fixes
-5. Once the fix works, codify it in source files
-6. Restart the job to verify end-to-end
+4. Ask user if they approve interactive mode for `browser-agent`
+5. If approved, run `libretto-cli session-mode interactive --session browser-agent`
+6. Use `libretto-cli exec` (with `--session browser-agent`) to inspect and prototype fixes
+7. Once the fix works, codify it in source files
+8. Restart the job to verify end-to-end
 
 ```bash
 # Start job in background
@@ -112,6 +127,7 @@ When browser automation jobs fail (selectors timing out, clicks not working), us
   --params '{"vendorName":"eClinicalWorks"}'
 
 # Inspect page state
+libretto-cli session-mode interactive --session browser-agent
 libretto-cli exec --session browser-agent "return await page.url();"
 libretto-cli snapshot --session browser-agent \
   --objective "Find dropdown menus and their current selections" \

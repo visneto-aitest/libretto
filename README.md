@@ -16,17 +16,21 @@ pnpm --filter libretto-cli dev
 
 ## cli safety mode
 
-`libretto-cli open` now starts sessions in read-only mode by default. This prevents `libretto-cli exec` from running Playwright automation unless you explicitly opt in. The `run` command is also blocked by default unless `--allow-actions` is provided.
+`libretto-cli open` starts sessions in read-only mode by default. `exec` and `run` are blocked until the session is explicitly made interactive.
 
 ```bash
 # default: read-only session (exec blocked)
 libretto-cli open https://example.com
 
-# opt in to interactive automation for this session
-libretto-cli open https://example.com --allow-actions
+# user explicitly approves this session for actions
+libretto-cli session-mode interactive --session default
 
-# run integrations only with explicit opt-in
-libretto-cli run ./integration.ts main --allow-actions
+# now action commands can run in that session
+libretto-cli exec "return await page.url()" --session default
+libretto-cli run ./integration.ts main --session default
+
+# lock it back down afterward
+libretto-cli session-mode read-only --session default
 ```
 
 ## snapshot analyzer configuration
