@@ -1,6 +1,7 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { openSync, existsSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
 import {
@@ -613,7 +614,7 @@ await new Promise(() => {});
   const child = spawn("node", ["--input-type=module", "-e", launcherCode], {
     detached: true,
     stdio: ["ignore", "ignore", childStderrFd],
-    cwd: join(REPO_ROOT, "packages", "libretto"),
+    cwd: dirname(createRequire(import.meta.url).resolve("libretto")),
   });
   child.unref();
 

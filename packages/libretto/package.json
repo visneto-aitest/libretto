@@ -81,12 +81,10 @@
     "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
-    "playwright": ">=1.40.0",
     "zod": ">=3.0.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.3",
-    "playwright": "^1.52.0",
     "tsup": "^8.0.0",
     "typescript": "^5.7.0",
     "zod": "^3.25.0"
@@ -95,6 +93,7 @@
     "@ai-sdk/anthropic": "^3.0.53",
     "@ai-sdk/google-vertex": "^4.0.72",
     "@ai-sdk/openai": "^3.0.39",
-    "ai": "^6.0.110"
+    "ai": "^6.0.110",
+    "playwright": "^1.52.0"
   }
 }
