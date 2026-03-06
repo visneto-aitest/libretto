@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { describe, expect } from "vitest";
 import { test } from "./test-fixtures";
 
@@ -272,5 +272,38 @@ describe("state-driven CLI subprocess behavior", () => {
     expect(result.stderr).toContain(
       "libretto-cli session-mode interactive --session flip-session",
     );
+  });
+
+  test("rejects session state files with unsupported version", async ({
+    librettoCli,
+    workspacePath,
+  }) => {
+    const session = "invalid-version-session";
+    const sessionDir = workspacePath(".libretto", "sessions", session);
+    await mkdir(sessionDir, { recursive: true });
+    await writeFile(
+      workspacePath(".libretto", "sessions", session, "state.json"),
+      JSON.stringify(
+        {
+          version: 2,
+          session,
+          runId: "run-invalid-version",
+          port: 65534,
+          pid: 12345,
+          startedAt: "2026-01-01T00:00:00.000Z",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    const result = await librettoCli(
+      `exec "return await page.title()" --session ${session}`,
+    );
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(`Could not read session state for "${session}"`);
+    expect(result.stderr).toContain("version");
   });
 });
