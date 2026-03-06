@@ -18,6 +18,8 @@ function getRepoRoot(): string {
 export const REPO_ROOT = getRepoRoot();
 export const STATE_DIR = join(REPO_ROOT, "tmp", "libretto-cli");
 export const LIBRETTO_DIR = join(REPO_ROOT, ".libretto-cli");
+export const LIBRETTO_CONFIG_DIR = join(REPO_ROOT, ".libretto");
+export const LIBRETTO_CONFIG_PATH = join(LIBRETTO_CONFIG_DIR, "config.json");
 export const PROFILES_DIR = join(LIBRETTO_DIR, "profiles");
 export const SNAPSHOT_ANALYZER_CONFIG_PATH = join(
   LIBRETTO_DIR,
