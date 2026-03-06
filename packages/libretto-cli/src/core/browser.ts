@@ -625,7 +625,11 @@ await new Promise(() => {});
     });
   });
 
-  for (let i = 0; i < 30; i++) {
+  const cdpPollIntervalMs = 500;
+  const cdpMaxAttempts = 30;
+  const cdpStartupTimeoutMs = cdpPollIntervalMs * cdpMaxAttempts;
+
+  for (let i = 0; i < cdpMaxAttempts; i++) {
     if (childSpawnError) {
       const errWithCode = childSpawnError as Error & { code?: string };
       const hint =
@@ -644,7 +648,7 @@ await new Promise(() => {});
       );
     }
 
-    await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, cdpPollIntervalMs));
     const ready = await fetch(`http://127.0.0.1:${port}/json/version`)
       .then(() => true)
       .catch(() => false);
@@ -676,9 +680,14 @@ await new Promise(() => {});
     }
   }
 
-  log.error("open-timeout", { session, port, pid: child.pid, attempts: 30 });
+  log.error("open-timeout", {
+    session,
+    port,
+    pid: child.pid,
+    attempts: cdpMaxAttempts,
+  });
   throw new Error(
-    `Failed to connect to browser after 15s. Check startup logs: ${runLogPath}`,
+    `Failed to connect to browser after ${Math.ceil(cdpStartupTimeoutMs / 1000)}s. Check startup logs: ${runLogPath}`,
   );
 }
 
