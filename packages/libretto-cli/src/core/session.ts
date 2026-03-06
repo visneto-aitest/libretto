@@ -15,29 +15,22 @@ import {
   LIBRETTO_CONFIG_PATH,
   LIBRETTO_SESSIONS_DIR,
 } from "./context";
-import { z } from "zod";
+import {
+  SESSION_STATE_VERSION,
+  SessionModeSchema,
+  parseSessionStateContent,
+  serializeSessionState,
+  type SessionMode,
+  type SessionState,
+} from "libretto/state";
 
 const SESSION_NAME_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 export const SESSION_DEFAULT = "default";
 export const SESSION_DEV_SERVER = "dev-server";
 export const SESSION_BROWSER_AGENT = "browser-agent";
-export const SESSION_STATE_VERSION = 1;
-
-const SessionModeSchema = z.enum(["read-only", "interactive"]);
-const SessionStateFileSchema = z.object({
-  version: z.literal(SESSION_STATE_VERSION),
-  port: z.number().int().min(0).max(65535),
-  pid: z.number().int(),
-  session: z.string().min(1),
-  runId: z.string().min(1),
-  startedAt: z.string().datetime({ offset: true }),
-  mode: SessionModeSchema.optional(),
-});
-type SessionStateFile = z.infer<typeof SessionStateFileSchema>;
-export type SessionMode = z.infer<typeof SessionModeSchema>;
-
-export type SessionState = Omit<SessionStateFile, "version">;
+export { SESSION_STATE_VERSION };
+export type { SessionMode, SessionState };
 
 type SessionPermissions = {
   sessions: Record<string, SessionMode>;
@@ -79,28 +72,7 @@ export function getStateFilePath(session: string): string {
 }
 
 function parseSessionState(content: string, stateFile: string): SessionState {
-  let rawState: unknown;
-  try {
-    rawState = JSON.parse(content);
-  } catch (error) {
-    throw new Error(
-      `Session state at ${stateFile} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-
-  const parsed = SessionStateFileSchema.safeParse(rawState);
-  if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((issue) => {
-        const path = issue.path.join(".") || "root";
-        return `${path}: ${issue.message}`;
-      })
-      .join("; ");
-    throw new Error(`Session state at ${stateFile} is invalid: ${issues}`);
-  }
-
-  const { version: _version, ...state } = parsed.data;
-  return state;
+  return parseSessionStateContent(content, stateFile);
 }
 
 export function readSessionState(session: string): SessionState | null {
@@ -181,10 +153,7 @@ export function readSessionStateOrThrow(session: string): SessionState {
 export function writeSessionState(state: SessionState): void {
   const log = getLog();
   const stateFile = getStateFilePath(state.session);
-  const fileState: SessionStateFile = {
-    version: SESSION_STATE_VERSION,
-    ...state,
-  };
+  const fileState = serializeSessionState(state);
   writeFileSync(stateFile, JSON.stringify(fileState, null, 2), "utf-8");
   log.info("session-state-write", {
     session: state.session,

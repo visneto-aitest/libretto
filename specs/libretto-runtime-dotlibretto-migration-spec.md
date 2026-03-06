@@ -55,13 +55,13 @@ Use one shared internal path helper module in `packages/libretto` so `launchBrow
 
 ### Phase 2: Migrate browser metadata and debug pause defaults
 
-- [ ] Update `launchBrowser` default metadata path from `tmp/libretto/<session>.json` to `.libretto/sessions/<session>/state.json`.
-- [ ] Keep `state.json` payload explicit and minimal for runtime metadata (`session`, `port`, `startedAt`; include `pid` if useful for cleanup/observability).
-- [ ] If `state.json` already exists, update only runtime metadata fields instead of replacing unrelated keys.
-- [ ] Update `debugPause` default `signalDir` from `tmp/libretto` to `.libretto/sessions/<session>/`.
-- [ ] Update JSDoc/comments for `DebugPauseOptions.signalDir` to document the new default location.
-- [ ] Success criteria: `run/browser.ts` and `debug/pause.ts` import shared runtime path helper(s) instead of constructing `tmp/libretto` paths inline.
-- [ ] Success criteria: a debug run produces `.paused`/`.resume` files in `.libretto/sessions/<session>/` and no files under `tmp/libretto/`.
+- [x] Update `launchBrowser` default metadata path from `tmp/libretto/<session>.json` to `.libretto/sessions/<session>/state.json`.
+- [x] Keep `state.json` payload explicit and minimal for runtime metadata (`session`, `port`, `startedAt`; include `pid` if useful for cleanup/observability).
+- [x] If `state.json` already exists, update only runtime metadata fields instead of replacing unrelated keys.
+- [x] Update `debugPause` default `signalDir` from `tmp/libretto` to `.libretto/sessions/<session>/`.
+- [x] Update JSDoc/comments for `DebugPauseOptions.signalDir` to document the new default location.
+- [x] Success criteria: `run/browser.ts` and `debug/pause.ts` import shared runtime path helper(s) instead of constructing `tmp/libretto` paths inline.
+- [x] Success criteria: a debug run produces `.paused`/`.resume` files in `.libretto/sessions/<session>/` and no files under `tmp/libretto/`.
 
 ### Phase 3: Migrate runner defaults to session-scoped `.libretto` paths
 

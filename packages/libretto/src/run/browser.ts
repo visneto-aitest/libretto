@@ -1,7 +1,8 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { createServer } from "node:net";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { ensureLibrettoSessionStatePath } from "../runtime/paths.js";
+import { SESSION_STATE_VERSION, SessionStateFileSchema } from "../state/session-state.js";
 
 async function pickFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
@@ -59,11 +60,46 @@ export async function launchBrowser({
   page.setDefaultTimeout(30_000);
   page.setDefaultNavigationTimeout(45_000);
 
-  const metadataPath = join(process.cwd(), "tmp", "libretto", `${sessionName}.json`);
-  mkdirSync(dirname(metadataPath), { recursive: true });
+  const metadataPath = ensureLibrettoSessionStatePath(sessionName);
+  const previousState =
+    existsSync(metadataPath) ? readFileSync(metadataPath, "utf-8") : null;
+  let previousStateObject: Record<string, unknown> = {};
+
+  if (previousState) {
+    try {
+      const parsed = JSON.parse(previousState) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        previousStateObject = parsed as Record<string, unknown>;
+      }
+    } catch {}
+  }
+
+  const parsedPreviousState = SessionStateFileSchema.safeParse(previousStateObject);
+
+  const preservedRunId =
+    parsedPreviousState.success
+      ? parsedPreviousState.data.runId
+      : `runtime-${Date.now()}`;
+  const preservedVersion =
+    parsedPreviousState.success
+      ? parsedPreviousState.data.version
+      : SESSION_STATE_VERSION;
+
   writeFileSync(
     metadataPath,
-    JSON.stringify({ session: sessionName, port: debugPort, startedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify(
+      {
+        ...previousStateObject,
+        version: preservedVersion,
+        session: sessionName,
+        port: debugPort,
+        pid: process.pid,
+        runId: preservedRunId,
+        startedAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
   );
 
   return {
@@ -74,9 +110,16 @@ export async function launchBrowser({
     metadataPath,
     close: async () => {
       await browser.close();
-      if (existsSync(metadataPath)) {
-        try { unlinkSync(metadataPath); } catch {}
+      if (previousState === null) {
+        if (existsSync(metadataPath)) {
+          try { unlinkSync(metadataPath); } catch {}
+        }
+        return;
       }
+
+      try {
+        writeFileSync(metadataPath, previousState, "utf-8");
+      } catch {}
     },
   };
 }
