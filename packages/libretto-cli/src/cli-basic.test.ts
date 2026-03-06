@@ -94,13 +94,42 @@ export async function main() {
     expect(result.stderr).toContain("must be a Libretto workflow instance");
   });
 
+  test("accepts branded Libretto workflow contract across module boundaries", async ({
+    librettoCli,
+    seedSessionPermission,
+    workspacePath,
+  }) => {
+    await seedSessionPermission("default", "interactive");
+    await writeFile(
+      workspacePath("integration.ts"),
+      `
+const brand = Symbol.for("libretto.workflow");
+
+export const main = {
+  [brand]: true,
+  metadata: {},
+  async run() {
+    return "ok";
+  },
+};
+`,
+      "utf8",
+    );
+
+    const result = await librettoCli("run ./integration.ts main", {
+      PLAYWRIGHT_BROWSERS_PATH: workspacePath("missing-playwright-browsers"),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain("must be a Libretto workflow instance");
+  });
+
   test("fails run when local auth profile is declared but missing", async ({
     librettoCli,
     seedSessionPermission,
     workspacePath,
   }) => {
     const librettoEntryUrl = new URL(
-      "../../libretto/dist/index.js",
+      "../../libretto/src/workflow/workflow.ts",
       import.meta.url,
     ).href;
     await seedSessionPermission("default", "interactive");
@@ -142,7 +171,7 @@ export const main = workflow(
     workspacePath,
   }) => {
     const librettoEntryUrl = new URL(
-      "../../libretto/dist/index.js",
+      "../../libretto/src/workflow/workflow.ts",
       import.meta.url,
     ).href;
     await seedSessionPermission("default", "interactive");
@@ -169,7 +198,7 @@ export const main = workflow({}, async () => "ok");
     workspacePath,
   }) => {
     const librettoEntryUrl = new URL(
-      "../../libretto/dist/index.js",
+      "../../libretto/src/workflow/workflow.ts",
       import.meta.url,
     ).href;
     await seedSessionPermission("default", "interactive");
