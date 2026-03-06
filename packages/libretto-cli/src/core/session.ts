@@ -15,22 +15,29 @@ import {
   LIBRETTO_CONFIG_PATH,
   LIBRETTO_SESSIONS_DIR,
 } from "./context";
+import { z } from "zod";
 
 const SESSION_NAME_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 export const SESSION_DEFAULT = "default";
 export const SESSION_DEV_SERVER = "dev-server";
 export const SESSION_BROWSER_AGENT = "browser-agent";
-export type SessionMode = "read-only" | "interactive";
+export const SESSION_STATE_VERSION = 1;
 
-export type SessionState = {
-  port: number;
-  pid: number;
-  session: string;
-  runId: string;
-  startedAt: string;
-  mode?: SessionMode;
-};
+const SessionModeSchema = z.enum(["read-only", "interactive"]);
+const SessionStateFileSchema = z.object({
+  version: z.literal(SESSION_STATE_VERSION),
+  port: z.number().int().min(0).max(65535),
+  pid: z.number().int(),
+  session: z.string().min(1),
+  runId: z.string().min(1),
+  startedAt: z.string().datetime({ offset: true }),
+  mode: SessionModeSchema.optional(),
+});
+type SessionStateFile = z.infer<typeof SessionStateFileSchema>;
+export type SessionMode = z.infer<typeof SessionModeSchema>;
+
+export type SessionState = Omit<SessionStateFile, "version">;
 
 type SessionPermissions = {
   sessions: Record<string, SessionMode>;
@@ -71,6 +78,31 @@ export function getStateFilePath(session: string): string {
   return getSessionStatePath(session);
 }
 
+function parseSessionState(content: string, stateFile: string): SessionState {
+  let rawState: unknown;
+  try {
+    rawState = JSON.parse(content);
+  } catch (error) {
+    throw new Error(
+      `Session state at ${stateFile} is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const parsed = SessionStateFileSchema.safeParse(rawState);
+  if (!parsed.success) {
+    const issues = parsed.error.issues
+      .map((issue) => {
+        const path = issue.path.join(".") || "root";
+        return `${path}: ${issue.message}`;
+      })
+      .join("; ");
+    throw new Error(`Session state at ${stateFile} is invalid: ${issues}`);
+  }
+
+  const { version: _version, ...state } = parsed.data;
+  return state;
+}
+
 export function readSessionState(session: string): SessionState | null {
   const log = getLog();
   const stateFile = getStateFilePath(session);
@@ -81,7 +113,7 @@ export function readSessionState(session: string): SessionState | null {
 
   try {
     const content = readFileSync(stateFile, "utf-8");
-    const state = JSON.parse(content) as SessionState;
+    const state = parseSessionState(content, stateFile);
     log.info("session-state-read", {
       session,
       port: state.port,
@@ -89,7 +121,11 @@ export function readSessionState(session: string): SessionState | null {
     });
     return state;
   } catch (err) {
-    log.warn("session-state-parse-error", { error: err, session, stateFile });
+    log.warn("session-state-parse-error", {
+      error: err instanceof Error ? err.message : String(err),
+      session,
+      stateFile,
+    });
     return null;
   }
 }
@@ -134,7 +170,7 @@ export function readSessionStateOrThrow(session: string): SessionState {
   }
 
   try {
-    return JSON.parse(readFileSync(stateFile, "utf-8")) as SessionState;
+    return parseSessionState(readFileSync(stateFile, "utf-8"), stateFile);
   } catch (err) {
     throw new Error(
       `Could not read session state for "${session}": ${err instanceof Error ? err.message : String(err)}`,
@@ -145,7 +181,11 @@ export function readSessionStateOrThrow(session: string): SessionState {
 export function writeSessionState(state: SessionState): void {
   const log = getLog();
   const stateFile = getStateFilePath(state.session);
-  writeFileSync(stateFile, JSON.stringify(state, null, 2), "utf-8");
+  const fileState: SessionStateFile = {
+    version: SESSION_STATE_VERSION,
+    ...state,
+  };
+  writeFileSync(stateFile, JSON.stringify(fileState, null, 2), "utf-8");
   log.info("session-state-write", {
     session: state.session,
     stateFile,
@@ -171,7 +211,7 @@ function ensureLibrettoDir(): void {
 }
 
 function isSessionMode(value: unknown): value is SessionMode {
-  return value === "read-only" || value === "interactive";
+  return SessionModeSchema.safeParse(value).success;
 }
 
 export function readSessionPermissions(): SessionPermissions {

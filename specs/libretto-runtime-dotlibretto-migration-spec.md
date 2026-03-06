@@ -49,10 +49,9 @@ Use one shared internal path helper module in `packages/libretto` so `launchBrow
 
 ### Phase 1: Add canonical runtime path helpers in `packages/libretto`
 
-- [ ] Add an internal helper module (for example `packages/libretto/src/runtime/paths.ts`) for `.libretto` runtime path resolution.
-- [ ] Add helpers for: session directory, session state path (`state.json`), pause signal directory, runner log directory, and runner log file path (`logs.jsonl`).
-- [ ] Ensure helper functions create required parent directories where write paths are used.
-- [ ] Success criteria: all `packages/libretto` runtime components can import shared helper(s) instead of constructing `tmp/libretto` paths inline.
+- [x] Add an internal helper module (for example `packages/libretto/src/runtime/paths.ts`) for `.libretto` runtime path resolution.
+- [x] Add helpers for: session directory, session state path (`state.json`), pause signal directory, runner log directory, and runner log file path (`logs.jsonl`).
+- [x] Ensure helper functions create required parent directories where write paths are used.
 
 ### Phase 2: Migrate browser metadata and debug pause defaults
 
@@ -61,6 +60,7 @@ Use one shared internal path helper module in `packages/libretto` so `launchBrow
 - [ ] If `state.json` already exists, update only runtime metadata fields instead of replacing unrelated keys.
 - [ ] Update `debugPause` default `signalDir` from `tmp/libretto` to `.libretto/sessions/<session>/`.
 - [ ] Update JSDoc/comments for `DebugPauseOptions.signalDir` to document the new default location.
+- [ ] Success criteria: `run/browser.ts` and `debug/pause.ts` import shared runtime path helper(s) instead of constructing `tmp/libretto` paths inline.
 - [ ] Success criteria: a debug run produces `.paused`/`.resume` files in `.libretto/sessions/<session>/` and no files under `tmp/libretto/`.
 
 ### Phase 3: Migrate runner defaults to session-scoped `.libretto` paths
