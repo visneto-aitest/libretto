@@ -2,16 +2,20 @@ import type { Page } from "playwright";
 import { writeFileSync, unlinkSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { isDebugMode } from "../config/config.js";
+import { ensureLibrettoPauseSignalDir, getLibrettoPauseSignalDir } from "../runtime/paths.js";
 
 export type DebugPauseOptions = {
-	/** Directory for pause signal files. Defaults to `tmp/libretto` in cwd. */
+	/** Directory for pause signal files. Defaults to `.libretto/sessions/<sessionName>` in cwd. */
 	signalDir?: string;
 	/** Session name for the signal file. Defaults to "libretto". */
 	sessionName?: string;
 };
 
 function getSignalDir(options?: DebugPauseOptions): string {
-	return options?.signalDir ?? join(process.cwd(), "tmp", "libretto");
+	return (
+		options?.signalDir ??
+		getLibrettoPauseSignalDir(getSessionName(options))
+	);
 }
 
 function getSessionName(options?: DebugPauseOptions): string {
@@ -56,7 +60,11 @@ export async function debugPause(
 	const pausedFile = getPausedFilePath(options);
 	const resumeFile = getResumeFilePath(options);
 
-	mkdirSync(getSignalDir(options), { recursive: true });
+	if (options?.signalDir) {
+		mkdirSync(options.signalDir, { recursive: true });
+	} else {
+		ensureLibrettoPauseSignalDir(getSessionName(options));
+	}
 	cleanupPauseFiles(options);
 
 	const url = page.url();
