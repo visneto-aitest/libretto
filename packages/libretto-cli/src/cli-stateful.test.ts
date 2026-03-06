@@ -5,7 +5,7 @@ import { test } from "./test-fixtures";
 
 describe("state-driven CLI subprocess behavior", () => {
   test("shows missing AI config", async ({ librettoCli }) => {
-    const result = await librettoCli("snapshot configure");
+    const result = await librettoCli("ai configure");
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("No AI config set.");
   });
@@ -14,7 +14,7 @@ describe("state-driven CLI subprocess behavior", () => {
     librettoCli,
     workspacePath,
   }) => {
-    const configure = await librettoCli("snapshot configure codex");
+    const configure = await librettoCli("ai configure codex");
     expect(configure.exitCode).toBe(0);
     expect(configure.stdout).toContain("AI config saved.");
 
@@ -27,11 +27,11 @@ describe("state-driven CLI subprocess behavior", () => {
     };
     expect(rawConfig.ai?.preset).toBe("codex");
 
-    const show = await librettoCli("snapshot configure");
+    const show = await librettoCli("ai configure");
     expect(show.exitCode).toBe(0);
     expect(show.stdout).toContain("AI preset: codex");
 
-    const clear = await librettoCli("snapshot configure --clear");
+    const clear = await librettoCli("ai configure --clear");
     expect(clear.exitCode).toBe(0);
     expect(clear.stdout).toContain("Cleared AI config:");
 
@@ -47,7 +47,7 @@ describe("state-driven CLI subprocess behavior", () => {
     librettoCli,
     workspacePath,
   }) => {
-    const configure = await librettoCli("snapshot configure gemini");
+    const configure = await librettoCli("ai configure gemini");
     expect(configure.exitCode).toBe(0);
     expect(configure.stdout).toContain("AI config saved.");
 
@@ -64,6 +64,18 @@ describe("state-driven CLI subprocess behavior", () => {
       "--output-format",
       "json",
     ]);
+  });
+
+  test("supports snapshot configure as a compatibility alias", async ({
+    librettoCli,
+    workspacePath,
+  }) => {
+    const configure = await librettoCli("snapshot configure codex");
+    expect(configure.exitCode).toBe(0);
+    expect(configure.stdout).toContain("AI config saved.");
+
+    const configPath = workspacePath(".libretto", "config.json");
+    expect(existsSync(configPath)).toBe(true);
   });
 
   test("reads and clears network logs from seeded run data", async ({

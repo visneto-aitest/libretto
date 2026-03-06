@@ -74,11 +74,11 @@ Move configuration behavior out of snapshot-specific code and into shared AI han
 
 Add a first-class `ai` command entry point so users configure model behavior in one obvious place. This phase is focused on discoverable CLI UX, not analyzer internals.
 
-- [ ] Add `ai configure [preset]` command in CLI registration with `--clear` and optional custom prefix via `--` separator.
-- [ ] Update root usage text/examples to show `libretto-cli ai configure ...`.
-- [ ] Keep command behavior deterministic and aligned with existing configure UX semantics.
-- [ ] Decide whether to keep `snapshot configure` as temporary alias in this phase; if kept, ensure help text labels it as compatibility behavior.
-- [ ] Success criteria: `libretto-cli ai configure codex`, bare `libretto-cli ai configure` (show), and `--clear` all run successfully with expected stdout and exit code `0`.
+- [x] Add `ai configure [preset]` command in CLI registration with `--clear` and optional custom prefix via `--` separator.
+- [x] Update root usage text/examples to show `libretto-cli ai configure ...`.
+- [x] Keep command behavior deterministic and aligned with existing configure UX semantics.
+- [x] Decide whether to keep `snapshot configure` as temporary alias in this phase; if kept, ensure help text labels it as compatibility behavior.
+- [x] Success criteria: `libretto-cli ai configure codex`, bare `libretto-cli ai configure` (show), and `--clear` all run successfully with expected stdout and exit code `0`.
 
 ### Phase 4: Rewire snapshot analyzer to shared AI config resolver
 
