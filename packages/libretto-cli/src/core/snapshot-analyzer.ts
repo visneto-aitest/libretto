@@ -1,24 +1,22 @@
 import {
   existsSync,
-  mkdirSync,
+  mkdtempSync,
   readFileSync,
-  statSync,
-  readdirSync,
-  unlinkSync,
-  writeFileSync,
+  rmSync,
 } from "node:fs";
-import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { extname, isAbsolute, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { z } from "zod";
+import {
+  type AiConfig,
+  formatCommandPrefix,
+  readAiConfig,
+} from "./ai-config";
 import {
   getLLMClientFactory,
   getLog,
-  LIBRETTO_DIR,
-  SNAPSHOT_ANALYZER_CONFIG_PATH,
-  STATE_DIR,
 } from "./context";
-import { getRunDir, getSessionStateOrThrow } from "./session";
 
 export type ScreenshotPair = {
   pngPath: string;
@@ -30,32 +28,8 @@ export type InterpretArgs = {
   objective: string;
   session: string;
   context: string;
-  pngPath?: string;
-  htmlPath?: string;
-};
-
-const SnapshotAnalyzerPresetSchema = z.enum([
-  "codex",
-  "opencode",
-  "claude",
-  "gemini",
-]);
-export type SnapshotAnalyzerPreset = z.infer<typeof SnapshotAnalyzerPresetSchema>;
-
-const SnapshotAnalyzerConfigSchema = z.object({
-  version: z.literal(1),
-  preset: SnapshotAnalyzerPresetSchema,
-  commandPrefix: z.array(z.string()).min(1),
-  updatedAt: z.string(),
-});
-
-type SnapshotAnalyzerConfig = z.infer<typeof SnapshotAnalyzerConfigSchema>;
-
-const SNAPSHOT_ANALYZER_PRESETS: Record<SnapshotAnalyzerPreset, string[]> = {
-  codex: ["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only"],
-  opencode: ["opencode", "run", "--format", "json"],
-  claude: [join(homedir(), ".claude", "local", "claude"), "-p"],
-  gemini: ["gemini", "--output-format", "json"],
+  pngPath: string;
+  htmlPath: string;
 };
 
 const InterpretResultSchema = z.object({
@@ -80,28 +54,13 @@ type ExternalCommandResult = {
   stderr: string;
 };
 
-function ensureLibrettoDir(): void {
-  mkdirSync(LIBRETTO_DIR, { recursive: true });
-}
-
-function quoteShellArg(value: string): string {
-  if (/^[a-zA-Z0-9_./:@=-]+$/.test(value)) return value;
-  return JSON.stringify(value);
-}
-
-function formatCommandPrefix(prefix: string[]): string {
-  return prefix.map((arg) => quoteShellArg(arg)).join(" ");
-}
-
 abstract class UserCodingAgent {
-  protected constructor(protected readonly config: SnapshotAnalyzerConfig) {}
+  protected constructor(protected readonly config: AiConfig) {}
 
-  static resolveFromConfig(config: SnapshotAnalyzerConfig): UserCodingAgent {
+  static resolveFromConfig(config: AiConfig): UserCodingAgent {
     switch (config.preset) {
       case "codex":
         return new CodexUserCodingAgent(config);
-      case "opencode":
-        return new OpencodeUserCodingAgent(config);
       case "claude":
         return new ClaudeUserCodingAgent(config);
       case "gemini":
@@ -109,16 +68,8 @@ abstract class UserCodingAgent {
     }
   }
 
-  static readConfiguredConfig(): SnapshotAnalyzerConfig | null {
-    if (!existsSync(SNAPSHOT_ANALYZER_CONFIG_PATH)) return null;
-    try {
-      const raw = readFileSync(SNAPSHOT_ANALYZER_CONFIG_PATH, "utf-8");
-      return SnapshotAnalyzerConfigSchema.parse(JSON.parse(raw));
-    } catch {
-      throw new Error(
-        `Snapshot analyzer config is invalid at ${SNAPSHOT_ANALYZER_CONFIG_PATH}. Delete it or run 'libretto-cli snapshot configure --clear'.`,
-      );
-    }
+  static readConfiguredConfig(): AiConfig | null {
+    return readAiConfig();
   }
 
   static getConfigured(): UserCodingAgent | null {
@@ -126,107 +77,14 @@ abstract class UserCodingAgent {
     return config ? this.resolveFromConfig(config) : null;
   }
 
-  static writeConfig(
-    preset: SnapshotAnalyzerPreset,
-    commandPrefix: string[],
-  ): SnapshotAnalyzerConfig {
-    ensureLibrettoDir();
-    const config = SnapshotAnalyzerConfigSchema.parse({
-      version: 1,
-      preset,
-      commandPrefix,
-      updatedAt: new Date().toISOString(),
-    });
-    writeFileSync(
-      SNAPSHOT_ANALYZER_CONFIG_PATH,
-      JSON.stringify(config, null, 2),
-      "utf-8",
-    );
-    return config;
-  }
-
-  static clearConfig(): boolean {
-    if (!existsSync(SNAPSHOT_ANALYZER_CONFIG_PATH)) return false;
-    unlinkSync(SNAPSHOT_ANALYZER_CONFIG_PATH);
-    return true;
-  }
-
-  static printConfig(config: SnapshotAnalyzerConfig): void {
-    console.log(`Snapshot analyzer preset: ${config.preset}`);
-    console.log(`Command prefix: ${formatCommandPrefix(config.commandPrefix)}`);
-    console.log(`Config file: ${SNAPSHOT_ANALYZER_CONFIG_PATH}`);
-    console.log(`Updated at: ${config.updatedAt}`);
-  }
-
-  static printConfigureUsage(): void {
-    console.log(
-      `Usage: libretto-cli snapshot configure <codex|opencode|claude|gemini> [-- <command prefix...>]
-       libretto-cli snapshot configure --show
-       libretto-cli snapshot configure --clear`,
-    );
-  }
-
-  static configureFromArgs(args: string[]): void {
-    if (args.includes("--show")) {
-      const config = this.readConfiguredConfig();
-      if (!config) {
-        console.log(
-          `No snapshot analyzer configured. Run 'libretto-cli snapshot configure codex' to set one.`,
-        );
-        return;
-      }
-      this.printConfig(config);
-      return;
-    }
-
-    if (args.includes("--clear")) {
-      const removed = this.clearConfig();
-      if (removed) {
-        console.log(
-          `Cleared snapshot analyzer config: ${SNAPSHOT_ANALYZER_CONFIG_PATH}`,
-        );
-      } else {
-        console.log("No snapshot analyzer config was set.");
-      }
-      return;
-    }
-
-    const presetArg = args[0];
-    const parsedPreset = SnapshotAnalyzerPresetSchema.safeParse(presetArg);
-    if (!parsedPreset.success) {
-      this.printConfigureUsage();
-      throw new Error(
-        "Missing or invalid preset. Use one of: codex, opencode, claude, gemini.",
-      );
-    }
-
-    const separator = args.indexOf("--");
-    const customPrefix =
-      separator >= 0 ? args.slice(separator + 1).filter(Boolean) : null;
-    if (separator >= 0 && customPrefix && customPrefix.length === 0) {
-      throw new Error("Custom command prefix cannot be empty after '--'.");
-    }
-
-    const preset = parsedPreset.data;
-    const commandPrefix =
-      customPrefix && customPrefix.length > 0
-        ? customPrefix
-        : SNAPSHOT_ANALYZER_PRESETS[preset];
-    const config = this.writeConfig(preset, commandPrefix);
-    console.log("Snapshot analyzer configured.");
-    this.printConfig(config);
-  }
-
-  get snapshotAnalyzerConfig(): SnapshotAnalyzerConfig {
+  get snapshotAnalyzerConfig(): AiConfig {
     return this.config;
   }
 
   protected get command(): string {
     const command = this.config.commandPrefix[0];
     if (!command) {
-      throw new Error(
-        "Snapshot analyzer config is invalid: command prefix is empty.",
-      );
+      throw new Error("AI config is invalid: command prefix is empty.");
     }
     return command;
   }
@@ -274,9 +132,9 @@ class CodexUserCodingAgent extends UserCodingAgent {
     prompt: string,
     pngPath: string,
   ): Promise<InterpretResult> {
-    mkdirSync(STATE_DIR, { recursive: true });
+    const tempDir = mkdtempSync(join(tmpdir(), "libretto-cli-analyzer-"));
     const outputPath = join(
-      STATE_DIR,
+      tempDir,
       `snapshot-analyzer-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
     );
     const args = [
@@ -295,25 +153,8 @@ class CodexUserCodingAgent extends UserCodingAgent {
       }
       return parseInterpretResultFromText(outputText);
     } finally {
-      if (existsSync(outputPath)) {
-        unlinkSync(outputPath);
-      }
+      rmSync(tempDir, { recursive: true, force: true });
     }
-  }
-}
-
-class OpencodeUserCodingAgent extends UserCodingAgent {
-  async analyzeSnapshot(
-    prompt: string,
-    pngPath: string,
-  ): Promise<InterpretResult> {
-    const args = [
-      ...this.baseArgs,
-      `${prompt}${this.screenshotHint(pngPath)}`,
-      "-f",
-      pngPath,
-    ];
-    return await this.runAndParse(args);
   }
 }
 
@@ -363,7 +204,7 @@ async function runExternalCommand(
       if (error.code === "ENOENT") {
         reject(
           new Error(
-            `Command not found: ${command}. Configure a different analyzer with 'libretto-cli snapshot configure'.`,
+            `Command not found: ${command}. Configure AI with 'libretto-cli ai configure'.`,
           ),
         );
         return;
@@ -600,115 +441,6 @@ function collectSelectorHints(html: string, limit = 120): string[] {
   return candidates;
 }
 
-function findLatestScreenshotPair(screenshotsDir: string): ScreenshotPair {
-  if (!existsSync(screenshotsDir)) {
-    throw new Error(
-      `No snapshots directory found: ${screenshotsDir}. Run 'libretto-cli snapshot' first.`,
-    );
-  }
-
-  const entries = readdirSync(screenshotsDir, { withFileTypes: true });
-  const pairs = new Map<
-    string,
-    { pngPath?: string; htmlPath?: string; mtimeMs: number }
-  >();
-
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const ext = extname(entry.name);
-    if (ext !== ".png" && ext !== ".html") continue;
-    const baseName = basename(entry.name, ext);
-    const fullPath = join(screenshotsDir, entry.name);
-    const stat = statSync(fullPath);
-    const current = pairs.get(baseName) || { mtimeMs: 0 };
-    const next = {
-      ...current,
-      mtimeMs: Math.max(current.mtimeMs, stat.mtimeMs),
-    };
-    if (ext === ".png") next.pngPath = fullPath;
-    if (ext === ".html") next.htmlPath = fullPath;
-    pairs.set(baseName, next);
-  }
-
-  let latestBaseName: string | null = null;
-  let latestPngPath: string | null = null;
-  let latestHtmlPath: string | null = null;
-  let latestMtime = 0;
-
-  pairs.forEach((pair, baseName) => {
-    if (!pair.pngPath || !pair.htmlPath) return;
-    if (!latestBaseName || pair.mtimeMs > latestMtime) {
-      latestBaseName = baseName;
-      latestPngPath = pair.pngPath;
-      latestHtmlPath = pair.htmlPath;
-      latestMtime = pair.mtimeMs;
-    }
-  });
-
-  if (!latestBaseName || !latestPngPath || !latestHtmlPath) {
-    throw new Error(
-      `No snapshot + HTML pair found in ${screenshotsDir}. Run 'libretto-cli snapshot' first.`,
-    );
-  }
-
-  return {
-    baseName: latestBaseName,
-    pngPath: latestPngPath,
-    htmlPath: latestHtmlPath,
-  };
-}
-
-function resolveScreenshotPair(
-  session: string,
-  pngPath?: string,
-  htmlPath?: string,
-): ScreenshotPair {
-  const state = getSessionStateOrThrow(session);
-  const runDir = getRunDir(state.runId);
-  let resolvedPng = pngPath ? resolvePath(pngPath) : undefined;
-  let resolvedHtml = htmlPath ? resolvePath(htmlPath) : undefined;
-
-  if (resolvedPng && !existsSync(resolvedPng)) {
-    throw new Error(`PNG file not found: ${resolvedPng}`);
-  }
-  if (resolvedHtml && !existsSync(resolvedHtml)) {
-    throw new Error(`HTML file not found: ${resolvedHtml}`);
-  }
-
-  if (resolvedPng && !resolvedHtml) {
-    const candidate = resolvedPng.replace(/\.[^.]+$/, ".html");
-    if (existsSync(candidate)) {
-      resolvedHtml = candidate;
-    }
-  }
-
-  if (resolvedHtml && !resolvedPng) {
-    const candidate = resolvedHtml.replace(/\.[^.]+$/, ".png");
-    if (existsSync(candidate)) {
-      resolvedPng = candidate;
-    }
-  }
-
-  if (!resolvedPng || !resolvedHtml) {
-    if (!resolvedPng && !resolvedHtml) {
-      return findLatestScreenshotPair(runDir);
-    }
-    throw new Error(
-      "Both PNG and HTML paths are required if one is provided (or ensure matching .png/.html exists).",
-    );
-  }
-
-  return {
-    baseName: basename(resolvedPng, extname(resolvedPng)),
-    pngPath: resolvedPng,
-    htmlPath: resolvedHtml,
-  };
-}
-
-export function runSnapshotConfigure(args: string[]): void {
-  UserCodingAgent.configureFromArgs(args);
-}
-
 export async function runInterpret(args: InterpretArgs): Promise<void> {
   const log = getLog();
   log.info("interpret-start", {
@@ -718,11 +450,15 @@ export async function runInterpret(args: InterpretArgs): Promise<void> {
   });
   process.env.NODE_ENV = "development";
 
-  const { pngPath, htmlPath } = resolveScreenshotPair(
-    args.session,
-    args.pngPath,
-    args.htmlPath,
-  );
+  const pngPath = resolvePath(args.pngPath);
+  const htmlPath = resolvePath(args.htmlPath);
+  if (!existsSync(pngPath)) {
+    throw new Error(`PNG file not found: ${pngPath}`);
+  }
+  if (!existsSync(htmlPath)) {
+    throw new Error(`HTML file not found: ${htmlPath}`);
+  }
+
   const htmlContent = readFileSync(htmlPath, "utf-8");
   const htmlCharLimit = 500_000;
   const { text: trimmedHtml, truncated } = truncateText(
@@ -773,7 +509,7 @@ export async function runInterpret(args: InterpretArgs): Promise<void> {
     const llmClientFactory = getLLMClientFactory();
     if (!llmClientFactory) {
       throw new Error(
-        "No snapshot analyzer configured. Run 'libretto-cli snapshot configure codex' (or opencode/claude/gemini). Library integrations can still set a factory via setLLMClientFactory().",
+        "No AI config set. Run 'libretto-cli ai configure codex' (or claude/gemini). Library integrations can still set a factory via setLLMClientFactory().",
       );
     }
 

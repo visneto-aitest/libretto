@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { describe, expect } from "vitest";
 import { test } from "./test-fixtures";
 
@@ -8,6 +9,22 @@ describe("basic CLI subprocess behavior", () => {
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Usage: libretto-cli <command> [--session <name>]");
     expect(result.stderr).toBe("");
+  });
+
+  test("bootstraps .libretto state on --help without creating legacy dirs", async ({
+    librettoCli,
+    workspacePath,
+  }) => {
+    const result = await librettoCli("--help");
+    expect(result.exitCode).toBe(0);
+
+    expect(existsSync(workspacePath(".libretto"))).toBe(true);
+    expect(existsSync(workspacePath(".libretto", ".gitignore"))).toBe(true);
+    expect(existsSync(workspacePath(".libretto", "sessions"))).toBe(true);
+    expect(existsSync(workspacePath(".libretto", "profiles"))).toBe(true);
+
+    expect(existsSync(workspacePath(".libretto-cli"))).toBe(false);
+    expect(existsSync(workspacePath("tmp", "libretto-cli"))).toBe(false);
   });
 
   test("prints usage for help command", async ({ librettoCli }) => {
@@ -30,6 +47,20 @@ describe("basic CLI subprocess behavior", () => {
     expect(result.stderr).toContain(
       "Usage: libretto-cli open <url> [--headless] [--session <name>]",
     );
+  });
+
+  test("fails open with actionable error when browser child spawn fails", async ({
+    librettoCli,
+  }) => {
+    const result = await librettoCli("open https://example.com", {
+      PATH: "/definitely-not-real",
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Failed to launch browser child process:");
+    expect(result.stderr).toContain(
+      "Ensure Node.js is available in PATH for child processes.",
+    );
+    expect(result.stderr).toContain("Check logs:");
   });
 
   test("fails exec with missing code usage error", async ({ librettoCli }) => {
@@ -57,6 +88,161 @@ describe("basic CLI subprocess behavior", () => {
     expect(result.exitCode).toBe(1);
     expect(result.stderr).not.toContain("is read-only");
     expect(result.stderr).toContain("Integration file does not exist:");
+  });
+
+  test("fails run when export is not a Libretto workflow instance", async ({
+    librettoCli,
+    seedSessionPermission,
+    workspacePath,
+  }) => {
+    await seedSessionPermission("default", "interactive");
+    await writeFile(
+      workspacePath("integration.ts"),
+      `
+export async function main() {
+  return "ok";
+}
+`,
+      "utf8",
+    );
+
+    const result = await librettoCli("run ./integration.ts main");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("must be a Libretto workflow instance");
+  });
+
+  test("accepts branded Libretto workflow contract across module boundaries", async ({
+    librettoCli,
+    seedSessionPermission,
+    workspacePath,
+  }) => {
+    await seedSessionPermission("default", "interactive");
+    await writeFile(
+      workspacePath("integration.ts"),
+      `
+const brand = Symbol.for("libretto.workflow");
+
+export const main = {
+  [brand]: true,
+  metadata: {},
+  async run() {
+    return "ok";
+  },
+};
+`,
+      "utf8",
+    );
+
+    const result = await librettoCli("run ./integration.ts main", {
+      PLAYWRIGHT_BROWSERS_PATH: workspacePath("missing-playwright-browsers"),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain("must be a Libretto workflow instance");
+  });
+
+  test("fails run when local auth profile is declared but missing", async ({
+    librettoCli,
+    seedSessionPermission,
+    workspacePath,
+  }) => {
+    const librettoEntryUrl = new URL(
+      "../../libretto/src/workflow/workflow.ts",
+      import.meta.url,
+    ).href;
+    await seedSessionPermission("default", "interactive");
+    await writeFile(
+      workspacePath("integration.ts"),
+      `
+import { workflow } from "${librettoEntryUrl}";
+
+export const main = workflow(
+  { authProfile: { type: "local", domain: "app.example.com" } },
+  async () => {
+    return "ok";
+  },
+);
+`,
+      "utf8",
+    );
+
+    const result = await librettoCli("run ./integration.ts main");
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'Local auth profile not found for domain "app.example.com".',
+    );
+    expect(result.stderr).toContain(
+      "Expected profile file:",
+    );
+    expect(result.stderr).toContain(
+      ".libretto/profiles/app.example.com.json",
+    );
+    expect(result.stderr).toContain(
+      "libretto-cli open https://app.example.com --headed --session default",
+    );
+    expect(result.stderr).toContain("libretto-cli save app.example.com --session default");
+  });
+
+  test("does not require local auth profile when auth metadata is absent", async ({
+    librettoCli,
+    seedSessionPermission,
+    workspacePath,
+  }) => {
+    const librettoEntryUrl = new URL(
+      "../../libretto/src/workflow/workflow.ts",
+      import.meta.url,
+    ).href;
+    await seedSessionPermission("default", "interactive");
+    await writeFile(
+      workspacePath("integration.ts"),
+      `
+import { workflow } from "${librettoEntryUrl}";
+
+export const main = workflow({}, async () => "ok");
+`,
+      "utf8",
+    );
+
+    const result = await librettoCli("run ./integration.ts main", {
+      PLAYWRIGHT_BROWSERS_PATH: workspacePath("missing-playwright-browsers"),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain("Local auth profile not found for domain");
+  });
+
+  test("proceeds when declared local auth profile file exists", async ({
+    librettoCli,
+    seedSessionPermission,
+    workspacePath,
+  }) => {
+    const librettoEntryUrl = new URL(
+      "../../libretto/src/workflow/workflow.ts",
+      import.meta.url,
+    ).href;
+    await seedSessionPermission("default", "interactive");
+    await writeFile(
+      workspacePath("integration.ts"),
+      `
+import { workflow } from "${librettoEntryUrl}";
+
+export const main = workflow(
+  { authProfile: { type: "local", domain: "app.example.com" } },
+  async () => "ok",
+);
+`,
+      "utf8",
+    );
+    await mkdir(workspacePath(".libretto", "profiles"), { recursive: true });
+    await writeFile(
+      workspacePath(".libretto", "profiles", "app.example.com.json"),
+      JSON.stringify({ cookies: [], origins: [] }),
+      "utf8",
+    );
+
+    const result = await librettoCli("run ./integration.ts main", {
+      PLAYWRIGHT_BROWSERS_PATH: workspacePath("missing-playwright-browsers"),
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).not.toContain("Local auth profile not found for domain");
   });
 
   test("fails open when deprecated --allow-actions flag is passed", async ({
@@ -89,11 +275,15 @@ describe("basic CLI subprocess behavior", () => {
 
     const raw = JSON.parse(
       await readFile(
-        workspacePath(".libretto-cli", "session-permissions.json"),
+        workspacePath(".libretto", "config.json"),
         "utf8",
       ),
-    ) as { sessions?: Record<string, string> };
-    expect(raw.sessions?.consented).toBe("interactive");
+    ) as {
+      permissions?: {
+        sessions?: Record<string, string>;
+      };
+    };
+    expect(raw.permissions?.sessions?.consented).toBe("interactive");
   });
 
   test("session-mode read-only removes interactive permission", async ({
@@ -107,11 +297,15 @@ describe("basic CLI subprocess behavior", () => {
 
     const raw = JSON.parse(
       await readFile(
-        workspacePath(".libretto-cli", "session-permissions.json"),
+        workspacePath(".libretto", "config.json"),
         "utf8",
       ),
-    ) as { sessions?: Record<string, string> };
-    expect(raw.sessions?.toggled).toBeUndefined();
+    ) as {
+      permissions?: {
+        sessions?: Record<string, string>;
+      };
+    };
+    expect(raw.permissions?.sessions?.toggled).toBeUndefined();
   });
 
   test("fails session-mode with invalid mode", async ({ librettoCli }) => {
