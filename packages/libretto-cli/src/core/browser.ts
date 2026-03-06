@@ -1,16 +1,22 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { openSync, existsSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
-import { getLog, PROFILES_DIR, REPO_ROOT, setLogFile } from "./context";
+import {
+  getLog,
+  getSessionActionsLogPath,
+  getSessionNetworkLogPath,
+  PROFILES_DIR,
+  REPO_ROOT,
+  setLogFile,
+} from "./context";
 import {
   clearSessionState,
   generateRunId,
   getSessionPermissionMode,
-  getRunDir,
-  getSessionStateOrThrow,
-  logFileForRun,
+  readSessionStateOrThrow,
+  logFileForSession,
   readSessionState,
   writeSessionState,
 } from "./session";
@@ -128,7 +134,7 @@ export async function connect(
 }> {
   const log = getLog();
   log.info("connect", { session, timeoutMs });
-  const state = getSessionStateOrThrow(session);
+  const state = readSessionStateOrThrow(session);
   const browser = await tryConnectToPort(state.port, timeoutMs);
   if (!browser) {
     log.error("connect-no-browser", {
@@ -229,7 +235,9 @@ export async function runOpen(
 
   const port = await pickFreePort();
   const runId = generateRunId();
-  const runLogPath = logFileForRun(runId);
+  const runLogPath = logFileForSession(session);
+  const networkLogPath = getSessionNetworkLogPath(session);
+  const actionsLogPath = getSessionActionsLogPath(session);
 
   setLogFile(runLogPath);
   log = getLog();
@@ -267,14 +275,20 @@ export async function runOpen(
     : "";
 
   const escapedLogPath = runLogPath.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+  const escapedNetworkLogPath = networkLogPath
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'");
+  const escapedActionsLogPath = actionsLogPath
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'");
 
   const launcherCode = `
 import { chromium } from 'playwright';
 import { appendFileSync, mkdirSync } from 'node:fs';
 
 const LOG_FILE = '${escapedLogPath}';
-const NETWORK_LOG = '${escapedLogPath}'.replace('session.log', 'network.jsonl');
-const ACTIONS_LOG = NETWORK_LOG.replace('network.jsonl', 'actions.jsonl');
+const NETWORK_LOG = '${escapedNetworkLogPath}';
+const ACTIONS_LOG = '${escapedActionsLogPath}';
 mkdirSync(NETWORK_LOG.replace(/\\/[^\\/]+$/, ''), { recursive: true });
 
 const STATIC_EXT_RE = /\\.(css|js|png|jpg|jpeg|gif|woff|woff2|ttf|ico|svg)(\\?|$)/i;
@@ -605,11 +619,17 @@ await new Promise(() => {});
 
   log.info("open-child-spawned", { pid: child.pid, port, session });
 
+  let childSpawnError: Error | null = null;
+  let childEarlyExit: { code: number | null; signal: NodeJS.Signals | null } | null =
+    null;
+
   child.on("error", (err) => {
+    childSpawnError = err;
     log.error("open-child-spawn-error", { error: err, session, port });
   });
 
   child.on("exit", (code, signal) => {
+    childEarlyExit = { code, signal };
     log.warn("open-child-exited", {
       code,
       signal,
@@ -619,8 +639,35 @@ await new Promise(() => {});
     });
   });
 
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 500));
+  const cdpPollIntervalMs = 500;
+  const cdpMaxAttempts = 30;
+  const cdpStartupTimeoutMs = cdpPollIntervalMs * cdpMaxAttempts;
+
+  for (let i = 0; i < cdpMaxAttempts; i++) {
+    const spawnError = childSpawnError as Error | null;
+    if (spawnError !== null) {
+      const errWithCode = spawnError as Error & { code?: string };
+      const hint =
+        errWithCode.code === "ENOENT"
+          ? " Ensure Node.js is available in PATH for child processes."
+          : "";
+      throw new Error(
+        `Failed to launch browser child process: ${spawnError.message}.${hint} Check logs: ${runLogPath}`,
+      );
+    }
+
+    const earlyExit = childEarlyExit as {
+      code: number | null;
+      signal: NodeJS.Signals | null;
+    } | null;
+    if (earlyExit !== null) {
+      const status = earlyExit.code ?? earlyExit.signal ?? "unknown";
+      throw new Error(
+        `Browser child process exited before startup (status: ${status}). Check logs: ${runLogPath}`,
+      );
+    }
+
+    await new Promise((r) => setTimeout(r, cdpPollIntervalMs));
     const ready = await fetch(`http://127.0.0.1:${port}/json/version`)
       .then(() => true)
       .catch(() => false);
@@ -652,8 +699,15 @@ await new Promise(() => {});
     }
   }
 
-  log.error("open-timeout", { session, port, pid: child.pid, attempts: 30 });
-  throw new Error("Failed to connect to browser.");
+  log.error("open-timeout", {
+    session,
+    port,
+    pid: child.pid,
+    attempts: cdpMaxAttempts,
+  });
+  throw new Error(
+    `Failed to connect to browser after ${Math.ceil(cdpStartupTimeoutMs / 1000)}s. Check startup logs: ${runLogPath}`,
+  );
 }
 
 export async function runSave(urlOrDomain: string, session: string): Promise<void> {
@@ -715,6 +769,7 @@ export async function runSave(urlOrDomain: string, session: string): Promise<voi
 
     const state = { cookies, origins };
     const fs = await import("node:fs/promises");
+    await fs.mkdir(dirname(profilePath), { recursive: true });
     await fs.writeFile(profilePath, JSON.stringify(state, null, 2));
 
     log.info("save-success", {

@@ -11,14 +11,23 @@ import { isAbsolute, resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import type { Argv } from "yargs";
-import type { Browser, BrowserContext, Page } from "playwright";
 import { installInstrumentation } from "libretto/instrumentation";
 import { setDebugMode } from "libretto/config";
 import { launchBrowser } from "libretto/run";
-import { connect, disconnectBrowser } from "../core/browser";
+import {
+  type LibrettoAuthProfile,
+  type LibrettoWorkflowContext,
+} from "libretto";
+import {
+  connect,
+  disconnectBrowser,
+  getProfilePath,
+  normalizeDomain,
+} from "../core/browser";
 import { getLog } from "../core/context";
 import {
-  getSessionStateOrThrow,
+  getSessionPermissionMode,
+  readSessionStateOrThrow,
   readOnlySessionError,
   resolveSessionMode,
 } from "../core/session";
@@ -29,6 +38,7 @@ import {
 } from "../core/telemetry";
 
 type ExecFunction = (...args: unknown[]) => Promise<unknown>;
+const LIBRETTO_WORKFLOW_BRAND = Symbol.for("libretto.workflow");
 
 type StripTypeScriptTypesFn = (
   code: string,
@@ -113,7 +123,7 @@ async function runExec(
   visualize = false,
 ): Promise<void> {
   const log = getLog();
-  const sessionState = getSessionStateOrThrow(session);
+  const sessionState = readSessionStateOrThrow(session);
   const mode = resolveSessionMode(session, sessionState);
   if (mode !== "interactive") {
     throw new Error(readOnlySessionError(session));
@@ -157,7 +167,7 @@ async function runExec(
   };
   process.on("SIGINT", sigintHandler);
 
-  wrapPageForActionLogging(page, sessionState.runId, onActivity);
+  wrapPageForActionLogging(page, session, onActivity);
 
   if (visualize) {
     await installInstrumentation(page, { visualize: true, logger: log });
@@ -224,24 +234,50 @@ async function runExec(
   }
 }
 
-type ExportedIntegrationFunction = (
-  ctx: {
-    logger: unknown;
-    page: Page;
-    context: BrowserContext;
-    browser: Browser;
-    session: string;
-    integrationPath: string;
-    exportName: string;
-    headless: boolean;
-  },
-  input: unknown,
-) => Promise<unknown>;
+function resolveLocalAuthProfilePath(domain: string): string {
+  return getProfilePath(normalizeDomain(domain));
+}
 
-function isExportedIntegrationFunction(
-  value: unknown,
-): value is ExportedIntegrationFunction {
-  return typeof value === "function";
+type LoadedLibrettoWorkflow = {
+  metadata: {
+    authProfile?: LibrettoAuthProfile;
+  };
+  run: (ctx: LibrettoWorkflowContext, input: unknown) => Promise<unknown>;
+};
+
+function isLoadedLibrettoWorkflow(value: unknown): value is LoadedLibrettoWorkflow {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<PropertyKey, unknown>;
+  return (
+    candidate[LIBRETTO_WORKFLOW_BRAND] === true &&
+    typeof candidate.run === "function" &&
+    !!candidate.metadata &&
+    typeof candidate.metadata === "object"
+  );
+}
+
+function resolveWorkflowStorageStatePath(workflow: LoadedLibrettoWorkflow): string | undefined {
+  const authProfile = workflow.metadata.authProfile;
+  if (authProfile?.type !== "local") {
+    return undefined;
+  }
+  return resolveLocalAuthProfilePath(authProfile.domain);
+}
+
+function getMissingLocalAuthProfileError(args: {
+  domain: string;
+  profilePath: string;
+  session: string;
+}): string {
+  const normalizedDomain = normalizeDomain(args.domain);
+  return [
+    `Local auth profile not found for domain "${normalizedDomain}".`,
+    `Expected profile file: ${args.profilePath}`,
+    "To create it:",
+    `  1. libretto-cli open https://${normalizedDomain} --headed --session ${args.session}`,
+    "  2. Log in manually in the browser window.",
+    `  3. libretto-cli save ${normalizedDomain} --session ${args.session}`,
+  ].join("\n");
 }
 
 async function runIntegrationFromFile(args: {
@@ -283,9 +319,9 @@ async function runIntegrationFromFile(args: {
     );
   }
 
-  if (!isExportedIntegrationFunction(targetExport)) {
+  if (!isLoadedLibrettoWorkflow(targetExport)) {
     throw new Error(
-      `Export "${args.exportName}" in ${absolutePath} must be an async function with signature (ctx, input).`,
+      `Export "${args.exportName}" in ${absolutePath} must be a Libretto workflow instance. Use workflow(...) from "libretto".`,
     );
   }
 
@@ -298,25 +334,37 @@ async function runIntegrationFromFile(args: {
     integrationExport: args.exportName,
     session: args.session,
   });
+  const workflow = targetExport;
+  const authProfile = workflow.metadata.authProfile;
+  const storageStatePath = resolveWorkflowStorageStatePath(workflow);
+  if (authProfile?.type === "local" && storageStatePath && !existsSync(storageStatePath)) {
+    throw new Error(
+      getMissingLocalAuthProfileError({
+        domain: authProfile.domain,
+        profilePath: storageStatePath,
+        session: args.session,
+      }),
+    );
+  }
   const browserSession = await launchBrowser({
     sessionName: args.session,
     headless: args.headless,
+    storageStatePath,
   });
 
+  const workflowContext: LibrettoWorkflowContext = {
+    logger: integrationLogger,
+    page: browserSession.page,
+    context: browserSession.context,
+    browser: browserSession.browser,
+    session: args.session,
+    integrationPath: absolutePath,
+    exportName: args.exportName,
+    headless: args.headless,
+  };
+
   try {
-    await targetExport(
-      {
-        logger: integrationLogger,
-        page: browserSession.page,
-        context: browserSession.context,
-        browser: browserSession.browser,
-        session: args.session,
-        integrationPath: absolutePath,
-        exportName: args.exportName,
-        headless: args.headless,
-      },
-      args.params ?? {},
-    );
+    await workflow.run(workflowContext, args.params ?? {});
     console.log("Integration completed.");
   } finally {
     await browserSession.close();
@@ -356,7 +404,7 @@ export function registerExecutionCommands(yargs: Argv): Argv {
     )
     .command(
       "run [integrationFile] [integrationExport]",
-      "Run an exported async integration function from a file",
+      "Run an exported Libretto workflow from a file",
       (cmd) =>
         cmd
           .option("params", { type: "string" })

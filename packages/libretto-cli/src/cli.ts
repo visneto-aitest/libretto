@@ -1,24 +1,27 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import yargs, { type Argv } from "yargs";
 import { hideBin } from "yargs/helpers";
+import { registerAICommands } from "./commands/ai";
 import { registerBrowserCommands } from "./commands/browser";
 import { registerExecutionCommands } from "./commands/execution";
 import { registerLogCommands } from "./commands/logs";
 import { registerSnapshotCommands } from "./commands/snapshot";
-import { flushLog, getLog, setLogFile, STATE_DIR } from "./core/context";
 import {
-  getStateFilePath,
-  logFileForRun,
+  ensureLibrettoSetup,
+  flushLog,
+  getLog,
+  setLogFile,
+} from "./core/context";
+import {
+  logFileForSession,
   SESSION_DEFAULT,
   validateSessionName,
-  type SessionState,
 } from "./core/session";
 
 const CLI_COMMANDS = new Set([
   "open",
   "run",
   "session-mode",
+  "ai",
   "save",
   "exec",
   "snapshot",
@@ -36,12 +39,12 @@ function printUsage(): void {
 Commands:
   open <url> [--headless] Launch browser and open URL (headed by default)
                           Automatically loads saved profile if available
-  run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]  Run an exported async integration function from a file (blocked until interactive)
+  run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--headed|--headless] [--debug <true|false>]  Run an exported Libretto workflow from a file (blocked until interactive)
   session-mode <read-only|interactive> Set session execution mode
+  ai configure [preset] [-- <command prefix...>]  Configure AI runtime for analysis commands
   save <url|domain>       Save current browser session (cookies, localStorage, etc.)
   exec <code> [--visualize]  Execute Playwright typescript code (--visualize enables ghost cursor + highlight; blocked until interactive)
   snapshot [--objective <text> --context <text>]  Capture PNG + HTML; analyze when both flags are provided
-  snapshot configure <codex|opencode|claude|gemini> [-- <command prefix...>]  Configure snapshot analyzer
   network [--last N] [--filter regex] [--method M] [--clear]  View captured network requests
   actions [--last N] [--filter regex] [--action TYPE] [--source SOURCE] [--clear]  View captured actions
   close                   Close the browser
@@ -61,11 +64,10 @@ Examples:
 
   libretto-cli exec "await page.locator('button:has-text(\\"Sign in\\")').click()"
   libretto-cli exec "await page.fill('input[name=\\"email\\"]', 'test@example.com')"
-  libretto-cli snapshot configure codex
-  libretto-cli snapshot configure opencode
-  libretto-cli snapshot configure claude
-  libretto-cli snapshot configure gemini
-  libretto-cli snapshot configure codex -- codex exec --skip-git-repo-check --sandbox read-only
+  libretto-cli ai configure codex
+  libretto-cli ai configure claude
+  libretto-cli ai configure gemini
+  libretto-cli ai configure <codex|claude|gemini> -- <command prefix...>
   libretto-cli snapshot
   libretto-cli snapshot --objective "Find the submit button" --context "Submitting a referral form, already filled in patient details"
   libretto-cli close
@@ -79,11 +81,14 @@ Available in exec:
   page, context, state, browser, networkLog, actionLog
 
 Profiles:
-  Profiles are saved to .libretto-cli/profiles/<domain>.json (git-ignored)
+  Profiles are saved to .libretto/profiles/<domain>.json (git-ignored)
   They persist cookies, localStorage, and session data across browser launches.
+  Local profiles are machine-local and are not shared with other users/environments.
+  Sessions can expire; if run fails auth, log in again and re-save the profile.
 
 Sessions:
-  Session state is stored in tmp/libretto-cli/<session>.json
+  Session state is stored in .libretto/sessions/<session>/state.json
+  CLI logs are stored in .libretto/sessions/<session>/logs.jsonl
   Each session runs an isolated browser instance on a dynamic port.
 `);
 }
@@ -129,30 +134,13 @@ function validateLegacySessionArg(rawArgs: string[]): void {
 
 function initializeLogger(rawArgs: string[]): void {
   const sessionForLog = parseSessionForLog(rawArgs);
-
-  const runIdForLog = (() => {
-    try {
-      const stateFile = getStateFilePath(sessionForLog);
-      if (existsSync(stateFile)) {
-        const state = JSON.parse(readFileSync(stateFile, "utf-8")) as SessionState;
-        if (state?.runId) return state.runId;
-      }
-    } catch {}
-    return null;
-  })();
-
-  const logFilePath = (() => {
-    if (runIdForLog) return logFileForRun(runIdForLog);
-    mkdirSync(STATE_DIR, { recursive: true });
-    return join(STATE_DIR, "cli.log");
-  })();
+  const logFilePath = logFileForSession(sessionForLog);
 
   setLogFile(logFilePath);
   getLog().info("cli-start", {
     args: rawArgs,
     cwd: process.cwd(),
     session: sessionForLog,
-    runId: runIdForLog,
   });
 }
 
@@ -180,6 +168,7 @@ function createParser(): Argv {
   parser = registerBrowserCommands(parser);
   parser = registerExecutionCommands(parser);
   parser = registerLogCommands(parser);
+  parser = registerAICommands(parser);
   parser = registerSnapshotCommands(parser);
   parser = parser.command("help", "Show usage", () => {}, () => {
     printUsage();
@@ -190,6 +179,7 @@ function createParser(): Argv {
 
 export async function runLibrettoCLI(): Promise<void> {
   const rawArgs = process.argv.slice(2);
+  ensureLibrettoSetup();
   initializeLogger(rawArgs);
   const log = getLog();
 
@@ -198,8 +188,6 @@ export async function runLibrettoCLI(): Promise<void> {
 
     const args = filterSessionArgs(rawArgs);
     const command = args[0];
-
-    log.info("cli-command", { command, args });
 
     if (!command || command === "--help" || command === "-h" || command === "help") {
       printUsage();
@@ -215,6 +203,7 @@ export async function runLibrettoCLI(): Promise<void> {
     }
 
     const parser = createParser();
+    log.info("cli-command", { command, args });
     await parser.parseAsync();
 
     await flushLog();
