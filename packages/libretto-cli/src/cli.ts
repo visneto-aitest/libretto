@@ -81,7 +81,7 @@ Available in exec:
   page, context, state, browser, networkLog, actionLog
 
 Profiles:
-  Profiles are saved to .libretto-cli/profiles/<domain>.json (git-ignored)
+  Profiles are saved to .libretto/profiles/<domain>.json (git-ignored)
   They persist cookies, localStorage, and session data across browser launches.
   Local profiles are machine-local and are not shared with other users/environments.
   Sessions can expire; if run fails auth, log in again and re-save the profile.

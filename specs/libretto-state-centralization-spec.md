@@ -95,11 +95,11 @@ Target layout:
 
 ### Phase 4: Consolidate session permission state into `.libretto/config.json`
 
-- [ ] Extend `LibrettoConfigSchema` to include a `sessionPermissions` object keyed by session name with `read-only|interactive` values.
-- [ ] Replace `.libretto-cli/session-permissions.json` reads/writes with config-backed reads/writes in `ai-config.ts` + `session.ts`.
-- [ ] Ensure `session-mode` command behavior remains unchanged from a user perspective.
-- [ ] Remove any remaining references to `.libretto-cli/session-permissions.json` from code and tests.
-- [ ] Success criteria: `session-mode interactive --session <name>` persists mode in `.libretto/config.json` and `run/exec` guards still enforce the same rules.
+- [x] Extend `LibrettoConfigSchema` to include a `permissions` object keyed by session name with `read-only|interactive` values.
+- [x] Replace `.libretto-cli/session-permissions.json` reads/writes with config-backed reads/writes in `ai-config.ts` + `session.ts`.
+- [x] Ensure `session-mode` command behavior remains unchanged from a user perspective.
+- [x] Remove any remaining references to `.libretto-cli/session-permissions.json` from code and tests.
+- [x] Success criteria: `session-mode interactive --session <name>` persists mode in `.libretto/config.json` and `run/exec` guards still enforce the same rules.
 
 ### Phase 5: Move default `libretto` package runtime state out of `tmp/libretto`
 
@@ -113,6 +113,6 @@ Target layout:
 
 - [ ] Update CLI fixtures/tests to seed/assert the new `.libretto` layout.
 - [ ] Add regression coverage that asserts commands do not create `.libretto-cli/` or `tmp/libretto-cli/` paths.
-- [ ] Update usage/help text and README references from old paths to `.libretto`.
+- [x] Update usage/help text and README references from old paths to `.libretto`.
 - [ ] Update root `.gitignore` policy to stop relying on `.libretto-cli/` and `tmp/` for libretto runtime state; keep ignores aligned with new `.libretto/.gitignore`.
 - [ ] Success criteria: `pnpm --filter libretto-cli test`, `pnpm --filter libretto-cli type-check`, and `pnpm --filter libretto type-check` pass with updated path expectations.

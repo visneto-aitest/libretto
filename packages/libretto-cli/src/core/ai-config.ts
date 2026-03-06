@@ -31,10 +31,18 @@ export const AiConfigSchema = z
   .strict();
 export type AiConfig = z.infer<typeof AiConfigSchema>;
 
+const SessionModeSchema = z.enum(["read-only", "interactive"]);
+const SessionPermissionsSchema = z
+  .object({
+    sessions: z.record(SessionModeSchema),
+  })
+  .strict();
+
 export const LibrettoConfigSchema = z
   .object({
     version: z.literal(CURRENT_CONFIG_VERSION),
     ai: AiConfigSchema.optional(),
+    permissions: SessionPermissionsSchema.optional(),
   })
   .strict();
 export type LibrettoConfig = z.infer<typeof LibrettoConfigSchema>;
@@ -120,6 +128,7 @@ export function clearAiConfig(configPath: string = LIBRETTO_CONFIG_PATH): boolea
   writeLibrettoConfig(
     {
       version: librettoConfig.version,
+      permissions: librettoConfig.permissions,
     },
     configPath,
   );

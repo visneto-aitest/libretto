@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -226,11 +226,15 @@ export const test = base.extend<CliFixtures>({
 
   seedSessionPermission: async ({ workspacePath }, use) => {
     await use(async (session: string, mode: "read-only" | "interactive") => {
-      const dir = workspacePath(".libretto-cli");
-      const path = workspacePath(".libretto-cli", "session-permissions.json");
+      const dir = workspacePath(".libretto");
+      const path = workspacePath(".libretto", "config.json");
       await mkdir(dir, { recursive: true });
-      const payload = {
-        version: 1,
+      let payload: Record<string, unknown> = { version: 1 };
+      if (existsSync(path)) {
+        payload = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+      }
+      payload.version = 1;
+      payload.permissions = {
         sessions: {
           [session]: mode,
         },

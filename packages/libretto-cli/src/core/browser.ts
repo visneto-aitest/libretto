@@ -1,6 +1,6 @@
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { openSync, existsSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
 import {
@@ -769,6 +769,7 @@ export async function runSave(urlOrDomain: string, session: string): Promise<voi
 
     const state = { cookies, origins };
     const fs = await import("node:fs/promises");
+    await fs.mkdir(dirname(profilePath), { recursive: true });
     await fs.writeFile(profilePath, JSON.stringify(state, null, 2));
 
     log.info("save-success", {
