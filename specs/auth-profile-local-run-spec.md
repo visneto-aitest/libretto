@@ -62,10 +62,10 @@ Add an explicit `LibrettoWorkflow` class to carry integration metadata and run l
 
 ### Phase 3: Authoring and prompt guidance updates
 
-- [ ] Update integration generation/prompt guidance to ask for auth handling when login is required.
-- [ ] Replace current guidance that forbids discussing saved sessions; instruct agents to offer local profile saving when appropriate.
-- [ ] Require warning text in generated workflow guidance: local profiles are machine-local and may expire, requiring re-login.
-- [ ] Success criteria: skill docs and CLI/help text include the new local-profile warning and no longer conflict with the runtime behavior.
+- [x] Update integration generation/prompt guidance to ask for auth handling when login is required.
+- [x] Replace current guidance that forbids discussing saved sessions; instruct agents to offer local profile saving when appropriate.
+- [x] Require warning text in generated workflow guidance: local profiles are machine-local and may expire, requiring re-login.
+- [x] Success criteria: skill docs and CLI/help text include the new local-profile warning and no longer conflict with the runtime behavior.
 
 ### Phase 4: End-to-end verification and docs alignment
 
