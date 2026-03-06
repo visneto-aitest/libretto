@@ -8,7 +8,6 @@ import { installInstrumentation } from "libretto/instrumentation";
 import { setDebugMode } from "libretto/config";
 import { launchBrowser } from "libretto/run";
 import {
-  LibrettoWorkflow,
   type LibrettoAuthProfile,
   type LibrettoWorkflowContext,
 } from "libretto";
@@ -32,6 +31,7 @@ import {
 } from "../core/telemetry";
 
 type ExecFunction = (...args: unknown[]) => Promise<unknown>;
+const LIBRETTO_WORKFLOW_BRAND = Symbol.for("libretto.workflow");
 
 type StripTypeScriptTypesFn = (
   code: string,
@@ -227,8 +227,26 @@ function resolveLocalAuthProfilePath(domain: string): string {
   return getProfilePath(normalizeDomain(domain));
 }
 
-function resolveWorkflowStorageStatePath(workflow: LibrettoWorkflow): string | undefined {
-  const authProfile: LibrettoAuthProfile | undefined = workflow.metadata.authProfile;
+type LoadedLibrettoWorkflow = {
+  metadata: {
+    authProfile?: LibrettoAuthProfile;
+  };
+  run: (ctx: LibrettoWorkflowContext, input: unknown) => Promise<unknown>;
+};
+
+function isLoadedLibrettoWorkflow(value: unknown): value is LoadedLibrettoWorkflow {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<PropertyKey, unknown>;
+  return (
+    candidate[LIBRETTO_WORKFLOW_BRAND] === true &&
+    typeof candidate.run === "function" &&
+    !!candidate.metadata &&
+    typeof candidate.metadata === "object"
+  );
+}
+
+function resolveWorkflowStorageStatePath(workflow: LoadedLibrettoWorkflow): string | undefined {
+  const authProfile = workflow.metadata.authProfile;
   if (authProfile?.type !== "local") {
     return undefined;
   }
@@ -290,7 +308,7 @@ async function runIntegrationFromFile(args: {
     );
   }
 
-  if (!(targetExport instanceof LibrettoWorkflow)) {
+  if (!isLoadedLibrettoWorkflow(targetExport)) {
     throw new Error(
       `Export "${args.exportName}" in ${absolutePath} must be a Libretto workflow instance. Use workflow(...) from "libretto".`,
     );

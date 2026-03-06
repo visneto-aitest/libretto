@@ -1,5 +1,7 @@
 import type { Browser, BrowserContext, Page } from "playwright";
 
+export const LIBRETTO_WORKFLOW_BRAND = Symbol.for("libretto.workflow");
+
 export type LibrettoAuthProfile = {
 	type: "local";
 	domain: string;
@@ -26,6 +28,7 @@ export type LibrettoWorkflowHandler<Input = unknown, Output = unknown> = (
 ) => Promise<Output>;
 
 export class LibrettoWorkflow<Input = unknown, Output = unknown> {
+	public readonly [LIBRETTO_WORKFLOW_BRAND] = true;
 	public readonly metadata: LibrettoWorkflowMetadata;
 	private readonly handler: LibrettoWorkflowHandler<Input, Output>;
 
@@ -38,7 +41,7 @@ export class LibrettoWorkflow<Input = unknown, Output = unknown> {
 	}
 
 	async run(ctx: LibrettoWorkflowContext, input: Input): Promise<Output> {
-		return await this.handler(ctx, input);
+		return this.handler(ctx, input);
 	}
 }
 

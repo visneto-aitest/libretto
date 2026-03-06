@@ -99,6 +99,7 @@ export {
 // Workflow helpers
 export {
 	LibrettoWorkflow,
+	LIBRETTO_WORKFLOW_BRAND,
 	workflow,
 	type LibrettoAuthProfile,
 	type LibrettoWorkflowMetadata,
