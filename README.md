@@ -43,19 +43,22 @@ Configure an external coding agent — no API keys needed in libretto, the agent
 
 ```bash
 # Use one of: codex, opencode, claude, gemini
-libretto-cli snapshot configure codex
-libretto-cli snapshot configure opencode
-libretto-cli snapshot configure claude
-libretto-cli snapshot configure gemini
+libretto-cli ai configure codex
+libretto-cli ai configure opencode
+libretto-cli ai configure claude
+libretto-cli ai configure gemini
 
 # Optionally provide a custom command prefix
-libretto-cli snapshot configure codex -- my-custom-codex --flag
+libretto-cli ai configure codex -- my-custom-codex --flag
 
 # Show current configuration
-libretto-cli snapshot configure
+libretto-cli ai configure
 
 # Clear configuration
-libretto-cli snapshot configure --clear
+libretto-cli ai configure --clear
+
+# Compatibility alias (still supported)
+libretto-cli snapshot configure codex
 ```
 
 ### Option 2: Built-in LLM client via environment variables

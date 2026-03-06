@@ -131,7 +131,7 @@ export function registerSnapshotCommands(yargs: Argv): Argv {
     )
     .command(
       "snapshot configure [preset]",
-      "Configure snapshot analyzer",
+      "Configure AI runtime (compatibility alias for 'ai configure')",
       (cmd) => cmd.option("clear", { type: "boolean", default: false }),
       (argv) => {
         const customPrefix = Array.isArray(argv["--"])
