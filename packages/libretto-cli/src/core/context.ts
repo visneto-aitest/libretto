@@ -16,12 +16,10 @@ function getRepoRoot(): string {
 }
 
 export const REPO_ROOT = getRepoRoot();
-export const LIBRETTO_DIR = join(REPO_ROOT, ".libretto-cli");
 export const LIBRETTO_CONFIG_DIR = join(REPO_ROOT, ".libretto");
 export const LIBRETTO_CONFIG_PATH = join(LIBRETTO_CONFIG_DIR, "config.json");
-export const PROFILES_DIR = join(LIBRETTO_DIR, "profiles");
+export const PROFILES_DIR = join(LIBRETTO_CONFIG_DIR, "profiles");
 export const LIBRETTO_SESSIONS_DIR = join(LIBRETTO_CONFIG_DIR, "sessions");
-export const LIBRETTO_PROFILES_DIR = join(LIBRETTO_CONFIG_DIR, "profiles");
 export const LIBRETTO_GITIGNORE_PATH = join(LIBRETTO_CONFIG_DIR, ".gitignore");
 
 const LIBRETTO_GITIGNORE_CONTENT = [
@@ -65,7 +63,7 @@ export function getSessionSnapshotRunDir(
 export function ensureLibrettoSetup(): void {
   mkdirSync(LIBRETTO_CONFIG_DIR, { recursive: true });
   mkdirSync(LIBRETTO_SESSIONS_DIR, { recursive: true });
-  mkdirSync(LIBRETTO_PROFILES_DIR, { recursive: true });
+  mkdirSync(PROFILES_DIR, { recursive: true });
 
   if (!existsSync(LIBRETTO_GITIGNORE_PATH)) {
     writeFileSync(LIBRETTO_GITIGNORE_PATH, LIBRETTO_GITIGNORE_CONTENT, "utf-8");

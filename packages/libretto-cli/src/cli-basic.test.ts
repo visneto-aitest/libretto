@@ -174,7 +174,7 @@ export const main = workflow(
       "Expected profile file:",
     );
     expect(result.stderr).toContain(
-      ".libretto-cli/profiles/app.example.com.json",
+      ".libretto/profiles/app.example.com.json",
     );
     expect(result.stderr).toContain(
       "libretto-cli open https://app.example.com --headed --session default",
@@ -231,9 +231,9 @@ export const main = workflow(
 `,
       "utf8",
     );
-    await mkdir(workspacePath(".libretto-cli", "profiles"), { recursive: true });
+    await mkdir(workspacePath(".libretto", "profiles"), { recursive: true });
     await writeFile(
-      workspacePath(".libretto-cli", "profiles", "app.example.com.json"),
+      workspacePath(".libretto", "profiles", "app.example.com.json"),
       JSON.stringify({ cookies: [], origins: [] }),
       "utf8",
     );
@@ -275,11 +275,15 @@ export const main = workflow(
 
     const raw = JSON.parse(
       await readFile(
-        workspacePath(".libretto-cli", "session-permissions.json"),
+        workspacePath(".libretto", "config.json"),
         "utf8",
       ),
-    ) as { sessions?: Record<string, string> };
-    expect(raw.sessions?.consented).toBe("interactive");
+    ) as {
+      permissions?: {
+        sessions?: Record<string, string>;
+      };
+    };
+    expect(raw.permissions?.sessions?.consented).toBe("interactive");
   });
 
   test("session-mode read-only removes interactive permission", async ({
@@ -293,11 +297,15 @@ export const main = workflow(
 
     const raw = JSON.parse(
       await readFile(
-        workspacePath(".libretto-cli", "session-permissions.json"),
+        workspacePath(".libretto", "config.json"),
         "utf8",
       ),
-    ) as { sessions?: Record<string, string> };
-    expect(raw.sessions?.toggled).toBeUndefined();
+    ) as {
+      permissions?: {
+        sessions?: Record<string, string>;
+      };
+    };
+    expect(raw.permissions?.sessions?.toggled).toBeUndefined();
   });
 
   test("fails session-mode with invalid mode", async ({ librettoCli }) => {
