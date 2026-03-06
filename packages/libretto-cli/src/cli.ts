@@ -85,6 +85,8 @@ Available in exec:
 Profiles:
   Profiles are saved to .libretto-cli/profiles/<domain>.json (git-ignored)
   They persist cookies, localStorage, and session data across browser launches.
+  Local profiles are machine-local and are not shared with other users/environments.
+  Sessions can expire; if run fails auth, log in again and re-save the profile.
 
 Sessions:
   Session state is stored in tmp/libretto-cli/<session>.json
