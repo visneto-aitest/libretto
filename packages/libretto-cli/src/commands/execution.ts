@@ -12,6 +12,7 @@ import { getLog } from "../core/context.js";
 import { getPauseSignalPaths } from "../core/pause-signals.js";
 import {
   getSessionPermissionMode,
+  takeOverSessionOwner,
   readSessionStateOrThrow,
   readOnlySessionError,
 } from "../core/session.js";
@@ -248,22 +249,6 @@ function readJsonFileIfExists(path: string): unknown {
   }
 }
 
-function readPausedAt(path: string): string | null {
-  const raw = readJsonFileIfExists(path);
-  if (!raw || typeof raw !== "object") return null;
-  const pausedAt = (raw as { pausedAt?: unknown }).pausedAt;
-  return typeof pausedAt === "string" ? pausedAt : null;
-}
-
-function readPausedOutputBytes(path: string): number {
-  const raw = readJsonFileIfExists(path);
-  if (!raw || typeof raw !== "object") return 0;
-  const outputBytes = (raw as { outputBytes?: unknown }).outputBytes;
-  return typeof outputBytes === "number" && Number.isFinite(outputBytes)
-    ? Math.max(0, Math.floor(outputBytes))
-    : 0;
-}
-
 function readFailureMessage(path: string): string | null {
   const raw = readJsonFileIfExists(path);
   if (!raw || typeof raw !== "object") return null;
@@ -279,20 +264,14 @@ function streamOutputSince(path: string, offset: number): number {
   return output.length;
 }
 
-type WorkflowWaitMode = "any-pause" | "next-pause";
-
 type WaitForWorkflowOutcomeArgs = {
-  signalPaths: ReturnType<typeof getPauseSignalPaths>;
+  session: string;
   pid: number;
-  outputOffset: number;
-  mode: WorkflowWaitMode;
-  pausedAtBaseline?: string | null;
-  operation: "run" | "resume";
 };
 
 type WorkflowOutcome = {
-  status: "completed" | "paused";
-  outputOffset: number;
+  status: "completed" | "paused" | "failed" | "exited";
+  message?: string;
 };
 
 function clearSignalIfExists(path: string): void {
@@ -307,46 +286,34 @@ function clearSignalIfExists(path: string): void {
 async function waitForWorkflowOutcome(
   args: WaitForWorkflowOutcomeArgs,
 ): Promise<WorkflowOutcome> {
+  const signalPaths = getPauseSignalPaths(args.session);
   if (args.pid <= 0) {
-    throw new Error(`Could not determine workflow process id for ${args.operation}.`);
+    return { status: "exited" };
   }
-  let outputOffset = args.outputOffset;
+  let outputOffset = 0;
 
   while (true) {
-    outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
+    outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
 
-    if (existsSync(args.signalPaths.failedSignalPath)) {
-      outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
-      const message = readFailureMessage(args.signalPaths.failedSignalPath);
-      throw new Error(
-        message
-          ? `Workflow failed during ${args.operation}: ${message}`
-          : `Workflow failed during ${args.operation}.`,
-      );
+    if (existsSync(signalPaths.failedSignalPath)) {
+      outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
+      const message = readFailureMessage(signalPaths.failedSignalPath);
+      return { status: "failed", message: message ?? undefined };
     }
 
-    if (existsSync(args.signalPaths.completedSignalPath)) {
-      outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
-      return { status: "completed", outputOffset };
+    if (existsSync(signalPaths.completedSignalPath)) {
+      outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
+      return { status: "completed" };
     }
 
-    if (existsSync(args.signalPaths.pausedSignalPath)) {
-      const pausedAt = readPausedAt(args.signalPaths.pausedSignalPath);
-      const isPauseOutcome = args.mode === "any-pause"
-        ? true
-        : !args.pausedAtBaseline ||
-            (pausedAt !== null && pausedAt !== args.pausedAtBaseline);
-      if (isPauseOutcome) {
-        outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
-        return { status: "paused", outputOffset };
-      }
+    if (existsSync(signalPaths.pausedSignalPath)) {
+      outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
+      return { status: "paused" };
     }
 
     if (!isProcessRunning(args.pid)) {
-      outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
-      throw new Error(
-        `Workflow process exited before reporting completion or pause during ${args.operation}.`,
-      );
+      outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
+      return { status: "exited" };
     }
 
     await new Promise((resolveWait) => setTimeout(resolveWait, 250));
@@ -375,8 +342,10 @@ async function runResume(session: string): Promise<void> {
     );
   }
 
-  const pausedAtBeforeResume = readPausedAt(pausedSignalPath);
-  let outputOffset = readPausedOutputBytes(pausedSignalPath);
+  // Clear stale pause/output markers before signaling resume so we always wait
+  // for the next pause/completion and only stream post-resume logs.
+  clearSignalIfExists(pausedSignalPath);
+  clearSignalIfExists(outputSignalPath);
   clearSignalIfExists(completedSignalPath);
   clearSignalIfExists(failedSignalPath);
 
@@ -395,28 +364,31 @@ async function runResume(session: string): Promise<void> {
   console.log(`Resume signal sent for session "${session}".`);
 
   const outcome = await waitForWorkflowOutcome({
-    signalPaths: {
-      pausedSignalPath,
-      resumeSignalPath,
-      completedSignalPath,
-      failedSignalPath,
-      outputSignalPath,
-    },
+    session,
     pid: state.pid,
-    outputOffset,
-    mode: "next-pause",
-    pausedAtBaseline: pausedAtBeforeResume,
-    operation: "resume",
   });
 
   if (outcome.status === "completed") {
     console.log("Integration completed.");
     return;
   }
+  if (outcome.status === "failed") {
+    throw new Error(
+      outcome.message
+        ? `Workflow failed after resume: ${outcome.message}`
+        : "Workflow failed after resume.",
+    );
+  }
+  if (outcome.status === "exited") {
+    throw new Error(
+      `Workflow process for session "${session}" exited before reporting completion or pause.`,
+    );
+  }
   console.log("Workflow paused.");
 }
 
 async function runIntegrationFromFile(args: RunIntegrationWorkerRequest): Promise<void> {
+  await takeOverSessionOwner(args.session, "run");
   const signalPaths = getPauseSignalPaths(args.session);
   clearSignalIfExists(signalPaths.pausedSignalPath);
   clearSignalIfExists(signalPaths.resumeSignalPath);
@@ -436,14 +408,20 @@ async function runIntegrationFromFile(args: RunIntegrationWorkerRequest): Promis
   worker.disconnect();
   worker.unref();
   const outcome = await waitForWorkflowOutcome({
-    signalPaths,
+    session: args.session,
     pid: worker.pid ?? 0,
-    outputOffset: 0,
-    mode: "any-pause",
-    operation: "run",
   });
   if (outcome.status === "paused") {
     console.log("Workflow paused.");
+    return;
+  }
+  if (outcome.status === "failed") {
+    throw new Error(outcome.message ?? "Workflow failed during run.");
+  }
+  if (outcome.status === "exited") {
+    throw new Error(
+      "Workflow process exited before reporting completion or pause during run.",
+    );
   }
 }
 

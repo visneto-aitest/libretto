@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, statSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { cwd } from "node:process";
 import { isAbsolute, resolve } from "node:path";
@@ -50,14 +50,6 @@ function mirrorStdoutToFile(filePath: string): () => void {
   };
 }
 
-function getOutputByteCount(path: string): number {
-  try {
-    return statSync(path).size;
-  } catch {
-    return 0;
-  }
-}
-
 async function waitForResumeSignal(args: {
   signalPaths: ReturnType<typeof getPauseSignalPaths>;
   session: string;
@@ -67,17 +59,9 @@ async function waitForResumeSignal(args: {
   const { pausedSignalPath, resumeSignalPath } = args.signalPaths;
   await mkdir(getSessionDir(args.session), { recursive: true });
   await removeSignalIfExists(resumeSignalPath);
-  const outputBytes = getOutputByteCount(args.signalPaths.outputSignalPath);
   await writeFile(
     pausedSignalPath,
-    JSON.stringify(
-      {
-        ...args.details,
-        outputBytes,
-      },
-      null,
-      2,
-    ),
+    JSON.stringify(args.details, null, 2),
     "utf8",
   );
   await args.onPaused?.(args.details);
