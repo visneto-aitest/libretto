@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { fork } from "node:child_process";
 import * as moduleBuiltin from "node:module";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ import {
   disconnectBrowser,
 } from "../core/browser.js";
 import { getLog } from "../core/context.js";
+import { getPauseSignalPaths } from "../core/pause-signals.js";
 import {
   getSessionPermissionMode,
   readSessionStateOrThrow,
@@ -230,6 +231,144 @@ function parseJsonArg(label: string, raw: string): unknown {
   }
 }
 
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readJsonFileIfExists(path: string): unknown {
+  if (!existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8")) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+function readPausedAt(path: string): string | null {
+  const raw = readJsonFileIfExists(path);
+  if (!raw || typeof raw !== "object") return null;
+  const pausedAt = (raw as { pausedAt?: unknown }).pausedAt;
+  return typeof pausedAt === "string" ? pausedAt : null;
+}
+
+function readPausedOutputBytes(path: string): number {
+  const raw = readJsonFileIfExists(path);
+  if (!raw || typeof raw !== "object") return 0;
+  const outputBytes = (raw as { outputBytes?: unknown }).outputBytes;
+  return typeof outputBytes === "number" && Number.isFinite(outputBytes)
+    ? Math.max(0, Math.floor(outputBytes))
+    : 0;
+}
+
+function readFailureMessage(path: string): string | null {
+  const raw = readJsonFileIfExists(path);
+  if (!raw || typeof raw !== "object") return null;
+  const message = (raw as { message?: unknown }).message;
+  return typeof message === "string" ? message : null;
+}
+
+function streamOutputSince(path: string, offset: number): number {
+  if (!existsSync(path)) return offset;
+  const output = readFileSync(path);
+  if (output.length <= offset) return output.length;
+  process.stdout.write(output.subarray(offset));
+  return output.length;
+}
+
+function clearSignalIfExists(path: string): void {
+  if (!existsSync(path)) return;
+  try {
+    unlinkSync(path);
+  } catch {
+    // Ignore cleanup failures; next checks still validate actual state.
+  }
+}
+
+async function runResume(session: string): Promise<void> {
+  const state = readSessionStateOrThrow(session);
+  const {
+    pausedSignalPath,
+    resumeSignalPath,
+    completedSignalPath,
+    failedSignalPath,
+    outputSignalPath,
+  } = getPauseSignalPaths(session);
+
+  if (!existsSync(pausedSignalPath)) {
+    throw new Error(
+      `Session "${session}" is not paused. Run "libretto-cli run ... --session ${session}" and call ctx.pause() first.`,
+    );
+  }
+
+  if (!isProcessRunning(state.pid)) {
+    throw new Error(
+      `No active paused workflow found for session "${session}" (worker pid ${state.pid} is not running).`,
+    );
+  }
+
+  const pausedAtBeforeResume = readPausedAt(pausedSignalPath);
+  let outputOffset = readPausedOutputBytes(pausedSignalPath);
+  clearSignalIfExists(completedSignalPath);
+  clearSignalIfExists(failedSignalPath);
+
+  writeFileSync(
+    resumeSignalPath,
+    JSON.stringify(
+      {
+        resumedAt: new Date().toISOString(),
+        sourcePid: process.pid,
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  console.log(`Resume signal sent for session "${session}".`);
+
+  while (true) {
+    outputOffset = streamOutputSince(outputSignalPath, outputOffset);
+
+    if (existsSync(failedSignalPath)) {
+      outputOffset = streamOutputSince(outputSignalPath, outputOffset);
+      const message = readFailureMessage(failedSignalPath);
+      throw new Error(
+        message
+          ? `Workflow failed after resume: ${message}`
+          : "Workflow failed after resume.",
+      );
+    }
+
+    if (existsSync(completedSignalPath)) {
+      outputOffset = streamOutputSince(outputSignalPath, outputOffset);
+      console.log("Integration completed.");
+      return;
+    }
+
+    if (existsSync(pausedSignalPath)) {
+      const pausedAt = readPausedAt(pausedSignalPath);
+      if (!pausedAtBeforeResume || (pausedAt && pausedAt !== pausedAtBeforeResume)) {
+        outputOffset = streamOutputSince(outputSignalPath, outputOffset);
+        console.log("Workflow paused.");
+        return;
+      }
+    }
+
+    if (!isProcessRunning(state.pid)) {
+      outputOffset = streamOutputSince(outputSignalPath, outputOffset);
+      throw new Error(
+        `Workflow process for session "${session}" exited before reporting completion or pause.`,
+      );
+    }
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+  }
+}
+
 function isRunIntegrationWorkerMessage(
   value: unknown,
 ): value is RunIntegrationWorkerMessage {
@@ -309,9 +448,6 @@ async function runIntegrationFromFile(args: RunIntegrationWorkerRequest): Promis
       }
       if (raw.type === "paused") {
         console.log("Workflow paused.");
-        if (worker.connected) {
-          worker.disconnect();
-        }
         worker.unref();
         resolveOnce();
         return;
@@ -437,6 +573,14 @@ export function registerExecutionCommands(yargs: Argv): Argv {
           headless: headlessMode ?? false,
           debug: debugMode,
         });
+      },
+    )
+    .command(
+      "resume",
+      "Resume a paused workflow for the current session",
+      (cmd) => cmd,
+      async (argv) => {
+        await runResume(String(argv.session));
       },
     );
 }
