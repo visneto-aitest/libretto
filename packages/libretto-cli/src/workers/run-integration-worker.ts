@@ -1,9 +1,11 @@
+import { writeFile } from "node:fs/promises";
 import type {
   RunIntegrationWorkerMessage,
   RunIntegrationWorkerRequest,
 } from "./run-integration-worker-protocol.js";
 import { runIntegrationFromFileInWorker } from "./run-integration-runtime.js";
 import { ensureLibrettoSetup, setLogFile } from "../core/context.js";
+import { getPauseSignalPaths } from "../core/pause-signals.js";
 import { logFileForSession } from "../core/session.js";
 
 function sendMessage(message: RunIntegrationWorkerMessage): void {
@@ -57,8 +59,9 @@ function parseWorkerRequest(argv: string[]): RunIntegrationWorkerRequest {
 }
 
 async function main(): Promise<void> {
+  let request: RunIntegrationWorkerRequest | null = null;
   try {
-    const request = parseWorkerRequest(process.argv);
+    request = parseWorkerRequest(process.argv);
     ensureLibrettoSetup();
     setLogFile(logFileForSession(request.session));
     await runIntegrationFromFileInWorker(
@@ -71,6 +74,21 @@ async function main(): Promise<void> {
     process.exit(0);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (request) {
+      const { failedSignalPath } = getPauseSignalPaths(request.session);
+      await writeFile(
+        failedSignalPath,
+        JSON.stringify(
+          {
+            failedAt: new Date().toISOString(),
+            message,
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+    }
     sendMessage({ type: "failed", message });
     process.exit(1);
   }

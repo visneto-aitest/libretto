@@ -21,7 +21,6 @@ import {
   wrapPageForActionLogging,
 } from "../core/telemetry.js";
 import type {
-  RunIntegrationWorkerMessage,
   RunIntegrationWorkerRequest,
 } from "../workers/run-integration-worker-protocol.js";
 
@@ -280,12 +279,77 @@ function streamOutputSince(path: string, offset: number): number {
   return output.length;
 }
 
+type WorkflowWaitMode = "any-pause" | "next-pause";
+
+type WaitForWorkflowOutcomeArgs = {
+  signalPaths: ReturnType<typeof getPauseSignalPaths>;
+  pid: number;
+  outputOffset: number;
+  mode: WorkflowWaitMode;
+  pausedAtBaseline?: string | null;
+  operation: "run" | "resume";
+};
+
+type WorkflowOutcome = {
+  status: "completed" | "paused";
+  outputOffset: number;
+};
+
 function clearSignalIfExists(path: string): void {
   if (!existsSync(path)) return;
   try {
     unlinkSync(path);
   } catch {
     // Ignore cleanup failures; next checks still validate actual state.
+  }
+}
+
+async function waitForWorkflowOutcome(
+  args: WaitForWorkflowOutcomeArgs,
+): Promise<WorkflowOutcome> {
+  if (args.pid <= 0) {
+    throw new Error(`Could not determine workflow process id for ${args.operation}.`);
+  }
+  let outputOffset = args.outputOffset;
+
+  while (true) {
+    outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
+
+    if (existsSync(args.signalPaths.failedSignalPath)) {
+      outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
+      const message = readFailureMessage(args.signalPaths.failedSignalPath);
+      throw new Error(
+        message
+          ? `Workflow failed during ${args.operation}: ${message}`
+          : `Workflow failed during ${args.operation}.`,
+      );
+    }
+
+    if (existsSync(args.signalPaths.completedSignalPath)) {
+      outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
+      return { status: "completed", outputOffset };
+    }
+
+    if (existsSync(args.signalPaths.pausedSignalPath)) {
+      const pausedAt = readPausedAt(args.signalPaths.pausedSignalPath);
+      const isPauseOutcome = args.mode === "any-pause"
+        ? true
+        : !args.pausedAtBaseline ||
+            (pausedAt !== null && pausedAt !== args.pausedAtBaseline);
+      if (isPauseOutcome) {
+        outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
+        return { status: "paused", outputOffset };
+      }
+    }
+
+    if (!isProcessRunning(args.pid)) {
+      outputOffset = streamOutputSince(args.signalPaths.outputSignalPath, outputOffset);
+      throw new Error(
+        `Workflow process exited before reporting completion or pause during ${args.operation}.`,
+      );
+    }
+
+    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
   }
 }
 
@@ -330,147 +394,57 @@ async function runResume(session: string): Promise<void> {
   );
   console.log(`Resume signal sent for session "${session}".`);
 
-  while (true) {
-    outputOffset = streamOutputSince(outputSignalPath, outputOffset);
+  const outcome = await waitForWorkflowOutcome({
+    signalPaths: {
+      pausedSignalPath,
+      resumeSignalPath,
+      completedSignalPath,
+      failedSignalPath,
+      outputSignalPath,
+    },
+    pid: state.pid,
+    outputOffset,
+    mode: "next-pause",
+    pausedAtBaseline: pausedAtBeforeResume,
+    operation: "resume",
+  });
 
-    if (existsSync(failedSignalPath)) {
-      outputOffset = streamOutputSince(outputSignalPath, outputOffset);
-      const message = readFailureMessage(failedSignalPath);
-      throw new Error(
-        message
-          ? `Workflow failed after resume: ${message}`
-          : "Workflow failed after resume.",
-      );
-    }
-
-    if (existsSync(completedSignalPath)) {
-      outputOffset = streamOutputSince(outputSignalPath, outputOffset);
-      console.log("Integration completed.");
-      return;
-    }
-
-    if (existsSync(pausedSignalPath)) {
-      const pausedAt = readPausedAt(pausedSignalPath);
-      if (!pausedAtBeforeResume || (pausedAt && pausedAt !== pausedAtBeforeResume)) {
-        outputOffset = streamOutputSince(outputSignalPath, outputOffset);
-        console.log("Workflow paused.");
-        return;
-      }
-    }
-
-    if (!isProcessRunning(state.pid)) {
-      outputOffset = streamOutputSince(outputSignalPath, outputOffset);
-      throw new Error(
-        `Workflow process for session "${session}" exited before reporting completion or pause.`,
-      );
-    }
-
-    await new Promise((resolveWait) => setTimeout(resolveWait, 250));
+  if (outcome.status === "completed") {
+    console.log("Integration completed.");
+    return;
   }
-}
-
-function isRunIntegrationWorkerMessage(
-  value: unknown,
-): value is RunIntegrationWorkerMessage {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  if (candidate.type === "completed") return true;
-  if (
-    candidate.type === "failed" &&
-    typeof candidate.message === "string"
-  ) {
-    return true;
-  }
-  if (
-    candidate.type === "paused" &&
-    typeof candidate.details === "object" &&
-    candidate.details !== null
-  ) {
-    const details = candidate.details as Record<string, unknown>;
-    return (
-      typeof details.sessionName === "string" &&
-      typeof details.pausedAt === "string" &&
-      typeof details.url === "string"
-    );
-  }
-  return false;
+  console.log("Workflow paused.");
 }
 
 async function runIntegrationFromFile(args: RunIntegrationWorkerRequest): Promise<void> {
+  const signalPaths = getPauseSignalPaths(args.session);
+  clearSignalIfExists(signalPaths.pausedSignalPath);
+  clearSignalIfExists(signalPaths.resumeSignalPath);
+  clearSignalIfExists(signalPaths.completedSignalPath);
+  clearSignalIfExists(signalPaths.failedSignalPath);
+  clearSignalIfExists(signalPaths.outputSignalPath);
+
   const workerEntryPath = fileURLToPath(
     new URL("../workers/run-integration-worker.js", import.meta.url),
   );
   const payload = JSON.stringify(args);
   const worker = fork(workerEntryPath, [payload], {
-    stdio: ["ignore", "pipe", "pipe", "ipc"],
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
     env: process.env,
   });
-
-  const onStdout = (chunk: Buffer | string) => {
-    process.stdout.write(chunk.toString());
-  };
-  const onStderr = (chunk: Buffer | string) => {
-    process.stderr.write(chunk.toString());
-  };
-  worker.stdout?.on("data", onStdout);
-  worker.stderr?.on("data", onStderr);
-
-  const cleanup = () => {
-    worker.stdout?.off("data", onStdout);
-    worker.stderr?.off("data", onStderr);
-    worker.removeAllListeners("message");
-    worker.removeAllListeners("error");
-    worker.removeAllListeners("exit");
-  };
-
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-
-    const resolveOnce = () => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      resolve();
-    };
-
-    const rejectOnce = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      reject(error);
-    };
-
-    worker.on("message", (raw: unknown) => {
-      if (!isRunIntegrationWorkerMessage(raw)) return;
-      if (raw.type === "completed") {
-        resolveOnce();
-        return;
-      }
-      if (raw.type === "paused") {
-        console.log("Workflow paused.");
-        worker.unref();
-        resolveOnce();
-        return;
-      }
-      rejectOnce(new Error(raw.message));
-    });
-
-    worker.on("error", (error) => {
-      rejectOnce(error);
-    });
-
-    worker.on("exit", (code, signal) => {
-      if (settled) return;
-      if (code === 0) {
-        resolveOnce();
-        return;
-      }
-      const reason = signal
-        ? `signal ${signal}`
-        : `code ${code ?? 1}`;
-      rejectOnce(new Error(`Integration worker exited with ${reason}.`));
-    });
+  worker.disconnect();
+  worker.unref();
+  const outcome = await waitForWorkflowOutcome({
+    signalPaths,
+    pid: worker.pid ?? 0,
+    outputOffset: 0,
+    mode: "any-pause",
+    operation: "run",
   });
+  if (outcome.status === "paused") {
+    console.log("Workflow paused.");
+  }
 }
 
 export function registerExecutionCommands(yargs: Argv): Argv {
