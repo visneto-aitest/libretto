@@ -1,7 +1,26 @@
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { describe, expect } from "vitest";
 import { test } from "./test-fixtures";
+
+function isPidRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPidToExit(pid: number, timeoutMs: number = 4_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isPidRunning(pid)) return;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+  throw new Error(`Timed out waiting for pid ${pid} to exit.`);
+}
 
 describe("basic CLI subprocess behavior", () => {
   test("prints usage for --help", async ({ librettoCli }) => {
@@ -79,6 +98,41 @@ describe("basic CLI subprocess behavior", () => {
     );
   });
 
+  test("run takes over existing session owner pid", async ({
+    librettoCli,
+    seedSessionPermission,
+    seedSessionState,
+  }) => {
+    await seedSessionPermission("default", "interactive");
+    const owner = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+    const pid = owner.pid;
+    expect(pid).toBeTypeOf("number");
+    if (!pid) {
+      throw new Error("Failed to spawn takeover test process.");
+    }
+
+    await seedSessionState({
+      session: "default",
+      mode: "interactive",
+      pid,
+    });
+
+    try {
+      const result = await librettoCli("run ./integration.ts main");
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Warning: session \"default\" is currently owned by pid ${pid}; terminating it before run.`,
+      );
+      await waitForPidToExit(pid);
+    } finally {
+      if (isPidRunning(pid)) {
+        process.kill(pid, "SIGKILL");
+      }
+    }
+  });
+
   test("allows run guard when session is permissioned interactive", async ({
     librettoCli,
     seedSessionPermission,
@@ -109,6 +163,42 @@ export async function main() {
     const result = await librettoCli("run ./integration.ts main");
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("must be a Libretto workflow instance");
+  });
+
+  test("open takes over existing session owner pid", async ({
+    librettoCli,
+    seedSessionState,
+  }) => {
+    const owner = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+    const pid = owner.pid;
+    expect(pid).toBeTypeOf("number");
+    if (!pid) {
+      throw new Error("Failed to spawn takeover test process.");
+    }
+
+    await seedSessionState({
+      session: "default",
+      mode: "interactive",
+      pid,
+    });
+
+    try {
+      const result = await librettoCli("open https://example.com", {
+        PATH: "/definitely-not-real",
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain(
+        `Warning: session \"default\" is currently owned by pid ${pid}; terminating it before open.`,
+      );
+      expect(result.stderr).toContain("Failed to launch browser child process:");
+      await waitForPidToExit(pid);
+    } finally {
+      if (isPidRunning(pid)) {
+        process.kill(pid, "SIGKILL");
+      }
+    }
   });
 
   test("accepts branded Libretto workflow contract across module boundaries", async ({

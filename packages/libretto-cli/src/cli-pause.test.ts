@@ -95,6 +95,68 @@ export const main = workflow({}, async (ctx) => {
     }
   }, 45_000);
 
+  test("handles multiple pause and resume cycles", async ({
+    librettoCli,
+    librettoRuntimePath,
+    seedSessionPermission,
+    seedSessionState,
+    writeWorkflowScript,
+  }) => {
+    await seedSessionPermission("default", "interactive");
+    await seedSessionState({ session: "default", mode: "interactive" });
+    const integrationFilePath = await writeWorkflowScript(
+      "integration-pause-multiple.mjs",
+      `
+import { workflow } from "${
+  librettoRuntimePath
+}";
+
+export const main = workflow({}, async (ctx) => {
+  console.log("CHECKPOINT_0");
+  await ctx.pause();
+  console.log("CHECKPOINT_1");
+  await ctx.pause();
+  console.log("CHECKPOINT_2");
+  await ctx.pause();
+  console.log("CHECKPOINT_DONE");
+});
+`,
+    );
+
+    try {
+      const runResult = await librettoCli(
+        `run "${integrationFilePath}" main --session default --headless --debug`,
+      );
+      expect(runResult.exitCode).toBe(0);
+      expect(runResult.stdout).toContain("CHECKPOINT_0");
+      expect(runResult.stdout).toContain("Workflow paused.");
+      expect(runResult.stdout).not.toContain("CHECKPOINT_1");
+      expect(runResult.stdout).not.toContain("Integration completed.");
+
+      const firstResume = await librettoCli("resume --session default");
+      expect(firstResume.exitCode).toBe(0);
+      expect(firstResume.stdout).toContain("CHECKPOINT_1");
+      expect(firstResume.stdout).toContain("Workflow paused.");
+      expect(firstResume.stdout).not.toContain("CHECKPOINT_2");
+      expect(firstResume.stdout).not.toContain("Integration completed.");
+
+      const secondResume = await librettoCli("resume --session default");
+      expect(secondResume.exitCode).toBe(0);
+      expect(secondResume.stdout).toContain("CHECKPOINT_2");
+      expect(secondResume.stdout).toContain("Workflow paused.");
+      expect(secondResume.stdout).not.toContain("CHECKPOINT_DONE");
+      expect(secondResume.stdout).not.toContain("Integration completed.");
+
+      const thirdResume = await librettoCli("resume --session default");
+      expect(thirdResume.exitCode).toBe(0);
+      expect(thirdResume.stdout).toContain("CHECKPOINT_DONE");
+      expect(thirdResume.stdout).toContain("Integration completed.");
+      expect(thirdResume.stdout).not.toContain("Workflow paused.");
+    } finally {
+      await librettoCli("close --session default");
+    }
+  }, 60_000);
+
   test("fails resume when session is not paused", async ({
     librettoCli,
     seedSessionState,
