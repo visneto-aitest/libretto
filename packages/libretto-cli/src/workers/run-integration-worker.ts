@@ -7,8 +7,11 @@ import { ensureLibrettoSetup, setLogFile } from "../core/context.js";
 import { logFileForSession } from "../core/session.js";
 
 function sendMessage(message: RunIntegrationWorkerMessage): void {
-  if (typeof process.send === "function") {
+  if (typeof process.send !== "function" || !process.connected) return;
+  try {
     process.send(message);
+  } catch {
+    // Parent may have disconnected after initial run returns on pause.
   }
 }
 
@@ -58,17 +61,12 @@ async function main(): Promise<void> {
     const request = parseWorkerRequest(process.argv);
     ensureLibrettoSetup();
     setLogFile(logFileForSession(request.session));
-    const outcome = await runIntegrationFromFileInWorker(
+    await runIntegrationFromFileInWorker(
       request,
       async (details) => {
         sendMessage({ type: "paused", details });
       },
     );
-    if (outcome.status !== "completed") {
-      throw new Error(
-        "Invariant violation: worker returned paused outcome instead of hanging.",
-      );
-    }
     sendMessage({ type: "completed" });
     process.exit(0);
   } catch (error) {

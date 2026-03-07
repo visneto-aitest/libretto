@@ -27,6 +27,7 @@ const CLI_COMMANDS = new Set([
   "snapshot",
   "network",
   "actions",
+  "resume",
   "close",
   "--help",
   "-h",
@@ -47,6 +48,7 @@ Commands:
   snapshot [--objective <text> --context <text>]  Capture PNG + HTML; analyze when both flags are provided
   network [--last N] [--filter regex] [--method M] [--clear]  View captured network requests
   actions [--last N] [--filter regex] [--action TYPE] [--source SOURCE] [--clear]  View captured actions
+  resume                  Resume a paused workflow in the active session
   close                   Close the browser
 
 Options:
@@ -70,6 +72,7 @@ Examples:
   libretto-cli ai configure <codex|claude|gemini> -- <command prefix...>
   libretto-cli snapshot
   libretto-cli snapshot --objective "Find the submit button" --context "Submitting a referral form, already filled in patient details"
+  libretto-cli resume --session default
   libretto-cli close
 
   # Multiple sessions

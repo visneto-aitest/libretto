@@ -67,7 +67,7 @@ export {
 	debugPause,
 	DebugPauseSignal,
 	isDebugPauseSignal,
-	type DebugPauseOptions,
+	type DebugPauseContext,
 	type DebugPauseDetails,
 } from "./debug/pause.js";
 
@@ -108,7 +108,7 @@ export {
 	debugPause as runDebugPause,
 	DebugPauseSignal as RunDebugPauseSignal,
 	isDebugPauseSignal as isRunDebugPauseSignal,
-	type DebugPauseOptions as RunDebugPauseOptions,
+	type DebugPauseContext as RunDebugPauseContext,
 	type DebugPauseDetails as RunDebugPauseDetails,
 	type LaunchBrowserArgs,
 	type BrowserSession,
