@@ -257,6 +257,19 @@ function readFailureMessage(path: string): string | null {
   return typeof message === "string" ? message : null;
 }
 
+async function waitForFailureMessage(
+  path: string,
+  timeoutMs = 1_000,
+): Promise<string | null> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const message = readFailureMessage(path);
+    if (message) return message;
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+  }
+  return readFailureMessage(path);
+}
+
 function streamOutputSince(path: string, offset: number): number {
   if (!existsSync(path)) return offset;
   const output = readFileSync(path);
@@ -298,7 +311,7 @@ async function waitForWorkflowOutcome(
 
     if (existsSync(signalPaths.failedSignalPath)) {
       outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
-      const message = readFailureMessage(signalPaths.failedSignalPath);
+      const message = await waitForFailureMessage(signalPaths.failedSignalPath);
       return { status: "failed", message: message ?? undefined };
     }
 
