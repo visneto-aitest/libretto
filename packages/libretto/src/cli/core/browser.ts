@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type CDPSession, type Page } from "playwright";
 import { openSync, existsSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -107,10 +107,51 @@ export function disconnectBrowser(
   }
 }
 
+function resolveOperationalPages(browser: Browser): Page[] {
+  return browser
+    .contexts()
+    .flatMap((context) => context.pages())
+    .filter(isOperationalPage);
+}
+
+type PageReference = {
+  id: string;
+  page: Page;
+};
+
+async function resolvePageId(page: Page): Promise<string> {
+  const cdpSession: CDPSession = await page.context().newCDPSession(page);
+  try {
+    const targetInfo = await cdpSession.send("Target.getTargetInfo");
+    const targetId = (targetInfo as { targetInfo?: { targetId?: unknown } })?.targetInfo
+      ?.targetId;
+    if (typeof targetId !== "string" || targetId.length === 0) {
+      throw new Error(`Could not resolve target id for page at URL "${page.url()}".`);
+    }
+    return targetId;
+  } finally {
+    await cdpSession.detach();
+  }
+}
+
+async function resolvePageReferences(pages: Page[]): Promise<PageReference[]> {
+  const refs = await Promise.all(
+    pages.map(async (page) => {
+      const id = await resolvePageId(page);
+      return { id, page };
+    }),
+  );
+  return refs;
+}
+
 export async function connect(
   session: string,
   logger: LoggerApi,
   timeoutMs: number = 10000,
+  options?: {
+    pageId?: string;
+    requireSinglePage?: boolean;
+  },
 ): Promise<{
   browser: Browser;
   context: BrowserContext;
@@ -139,7 +180,7 @@ export async function connect(
   }
 
   const allPages = contexts.flatMap((c) => c.pages());
-  const pages = allPages.filter(isOperationalPage);
+  const pages = resolveOperationalPages(browser);
 
   logger.info("connect-pages", {
     session,
@@ -156,7 +197,21 @@ export async function connect(
     throw new Error("No pages found.");
   }
 
-  const page = pages[pages.length - 1]!;
+  if (options?.requireSinglePage && !options.pageId && pages.length > 1) {
+    throw new Error(
+      `Multiple pages are open in session "${session}". Pass --page <id> to target a page (run "libretto-cli pages --session ${session}" to list ids).`,
+    );
+  }
+
+  const pageRefs = await resolvePageReferences(pages);
+  const page = options?.pageId
+    ? (pageRefs.find((ref) => ref.id === options.pageId)?.page ?? null)
+    : pages[pages.length - 1]!;
+  if (!page) {
+    throw new Error(
+      `Page "${options?.pageId}" was not found in session "${session}". Run "libretto-cli pages --session ${session}" to list ids.`,
+    );
+  }
   const context = page.context();
 
   page.on("close", () => {
@@ -193,10 +248,10 @@ export async function runPages(session: string, logger: LoggerApi): Promise<void
       console.log("No pages found.");
       return;
     }
+    const pageRefs = await resolvePageReferences(pages);
 
     console.log("Open pages:");
-    pages.forEach((page, index) => {
-      const pageId = `page-${index + 1}`;
+    pageRefs.forEach(({ page, id: pageId }) => {
       const activeSuffix = page === activePage ? " active=true" : "";
       console.log(`  id=${pageId} url=${page.url()}${activeSuffix}`);
     });

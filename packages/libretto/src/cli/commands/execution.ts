@@ -108,6 +108,7 @@ async function runExec(
   session: string,
   logger: LoggerApi,
   visualize = false,
+  pageId?: string,
 ): Promise<void> {
   readSessionStateOrThrow(session);
 
@@ -116,8 +117,12 @@ async function runExec(
     codeLength: code.length,
     codePreview: code.slice(0, 200),
     visualize,
+    pageId,
   });
-  const { browser, context, page } = await connect(session, logger);
+  const { browser, context, page } = await connect(session, logger, 10000, {
+    pageId,
+    requireSinglePage: true,
+  });
 
   const STALL_THRESHOLD_MS = 60_000;
   let lastActivityTs = Date.now();
@@ -450,7 +455,10 @@ export function registerExecutionCommands(yargs: Argv, logger: LoggerApi): Argv 
     .command(
       "exec [code..]",
       "Execute Playwright TypeScript code",
-      (cmd) => cmd.option("visualize", { type: "boolean", default: false }),
+      (cmd) =>
+        cmd
+          .option("visualize", { type: "boolean", default: false })
+          .option("page", { type: "string" }),
       async (argv) => {
         const codeParts = Array.isArray(argv.code)
           ? (argv.code as string[])
@@ -463,7 +471,13 @@ export function registerExecutionCommands(yargs: Argv, logger: LoggerApi): Argv 
             "Usage: libretto-cli exec <code> [--session <name>] [--visualize]",
           );
         }
-        await runExec(code, String(argv.session), logger, Boolean(argv.visualize));
+        await runExec(
+          code,
+          String(argv.session),
+          logger,
+          Boolean(argv.visualize),
+          argv.page ? String(argv.page) : undefined,
+        );
       },
     )
     .command(
