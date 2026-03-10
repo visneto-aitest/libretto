@@ -10,9 +10,5 @@ export default defineConfig({
     isolate: true,
     fileParallelism: true,
     maxWorkers: "100%",
-    maxConcurrency: 1_000,
-    sequence: {
-      concurrent: true,
-    },
   },
 });
