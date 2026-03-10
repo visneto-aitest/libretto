@@ -51,20 +51,6 @@ function isProcessRunning(pid: number): boolean {
   }
 }
 
-function killProcessTree(pid: number): void {
-  try {
-    process.kill(-pid, "SIGKILL");
-    return;
-  } catch {
-    // Fall through to direct pid kill.
-  }
-  try {
-    process.kill(pid, "SIGKILL");
-  } catch {
-    // Ignore best-effort cleanup failures.
-  }
-}
-
 async function waitForProcessToStop(
   pid: number,
   timeoutMs: number = 3_000,
@@ -208,16 +194,12 @@ describe("state-driven CLI subprocess behavior", () => {
       );
       expect(opened.exitCode).toBe(0);
 
-      try {
         const snapshot = await librettoCli(
           `snapshot --objective "Find heading" --context "Preset ${preset} snapshot smoke test" --session ${session}`,
         );
         expect(snapshot.exitCode).toBe(0);
         expect(snapshot.stdout).toContain("Interpretation:");
         expect(snapshot.stdout).toContain(`Answer: snapshot-ok-${preset}`);
-      } finally {
-        await librettoCli(`close --session ${session}`);
-      }
     }, 45_000);
   }
 
@@ -236,17 +218,12 @@ describe("state-driven CLI subprocess behavior", () => {
       `open https://example.com --headless --session ${session}`,
     );
     expect(opened.exitCode).toBe(0);
-
-    try {
       const snapshot = await librettoCli(
         `snapshot --objective "Find heading" --session ${session}`,
       );
       expect(snapshot.exitCode).toBe(0);
       expect(snapshot.stdout).toContain("Interpretation:");
       expect(snapshot.stdout).toContain("Answer: snapshot-ok-objective-only");
-    } finally {
-      await librettoCli(`close --session ${session}`);
-    }
   }, 45_000);
 
   test("fails snapshot when --context is provided without --objective", async ({
@@ -257,8 +234,6 @@ describe("state-driven CLI subprocess behavior", () => {
       `open https://example.com --headless --session ${session}`,
     );
     expect(opened.exitCode).toBe(0);
-
-    try {
       const snapshot = await librettoCli(
         `snapshot --context "extra context only" --session ${session}`,
       );
@@ -266,9 +241,6 @@ describe("state-driven CLI subprocess behavior", () => {
       expect(snapshot.stderr).toContain(
         "Couldn't run analysis: --objective is required when providing --context.",
       );
-    } finally {
-      await librettoCli(`close --session ${session}`);
-    }
   }, 45_000);
 
   test("fails open when session already has an active browser", async ({
@@ -279,8 +251,6 @@ describe("state-driven CLI subprocess behavior", () => {
       `open https://example.com --headless --session ${session}`,
     );
     expect(firstOpen.exitCode).toBe(0);
-
-    try {
       const secondOpen = await librettoCli(
         `open https://example.com --headless --session ${session}`,
       );
@@ -291,9 +261,6 @@ describe("state-driven CLI subprocess behavior", () => {
       expect(secondOpen.stderr).toContain(
         `libretto-cli close --session ${session}`,
       );
-    } finally {
-      await librettoCli(`close --session ${session}`);
-    }
   }, 45_000);
 
   test("prints no-op message when closing a session with no browser", async ({
@@ -370,8 +337,6 @@ describe("state-driven CLI subprocess behavior", () => {
       pid: pid!,
       port: 65533,
     });
-
-    try {
       const graceful = await librettoCli("close --all");
       expect(graceful.exitCode).toBe(1);
       expect(graceful.stderr).toContain(
@@ -387,11 +352,6 @@ describe("state-driven CLI subprocess behavior", () => {
       expect(forced.stdout).toContain("Force-killed 1 session(s).");
       expect(existsSync(statePath)).toBe(false);
       expect(await waitForProcessToStop(pid!, 5_000)).toBe(true);
-    } finally {
-      if (pid && isProcessRunning(pid)) {
-        killProcessTree(pid);
-      }
-    }
   }, 20_000);
 
   test("reads and clears network logs from seeded run data", async ({
