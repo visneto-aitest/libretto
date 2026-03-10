@@ -296,23 +296,19 @@ export const main = workflow({}, async (ctx) => {
 `,
     );
 
-    try {
-      const runResult = await librettoCli(
-        `run "${integrationFilePath}" main --session ${session} --headless`,
-      );
-      await evaluate(runResult.stderr).toMatch(
-        "Includes the workflow error and also gives guidance that the browser is still open, to use exec for inspection, and to run run again to re-run the workflow.",
-      );
+    const runResult = await librettoCli(
+      `run "${integrationFilePath}" main --session ${session} --headless`,
+    );
+    await evaluate(runResult.stderr).toMatch(
+      "Includes the workflow error and also gives guidance that the browser is still open, to use exec for inspection, and to run run again to re-run the workflow.",
+    );
 
-      const rerunResult = await librettoCli(
-        `run "${integrationFilePath}" main --session ${session} --headless`,
-      );
-      await evaluate(rerunResult.stderr).toMatch(
-        "Includes the workflow error and the same casual guidance that browser stays open for exec and run can rerun, and does not say the session is already open and connected.",
-      );
-    } finally {
-      await librettoCli(`close --session ${session}`);
-    }
+    const rerunResult = await librettoCli(
+      `run "${integrationFilePath}" main --session ${session} --headless`,
+    );
+    await evaluate(rerunResult.stderr).toMatch(
+      "Includes the workflow error and the same casual guidance that browser stays open for exec and run can rerun, and does not say the session is already open and connected.",
+    );
   }, 60_000);
 
   test("fails save with missing target usage error", async ({
