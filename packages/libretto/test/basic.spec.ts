@@ -65,6 +65,17 @@ describe("basic CLI subprocess behavior", () => {
     );
   });
 
+  test("fails exec with missing code usage error when only flags are passed", async ({
+    librettoCli,
+    evaluate,
+  }) => {
+    const result = await librettoCli("exec --visualize");
+    await evaluate(result.stderr).toMatch(
+      "Shows usage for exec command requiring code with optional session and visualize flags.",
+    );
+    expect(result.stderr).not.toContain(`Missing required --session for "exec".`);
+  });
+
   test("fails run when integration file does not exist", async ({
     librettoCli,
     evaluate,
@@ -325,19 +336,16 @@ export const main = workflow({}, async (ctx) => {
     librettoCli,
     evaluate,
   }) => {
-    const result = await librettoCli("help --session");
+    const result = await librettoCli(`exec "return 1" --session`);
     await evaluate(result.stderr).toMatch(
-      "Reports missing or invalid --session value.",
+      "Reports that --session is missing its required value.",
     );
   });
 
-  test("fails when --session value is another command token", async ({
+  test("allows command-like --session values", async ({
     librettoCli,
-    evaluate,
   }) => {
     const result = await librettoCli("help --session open");
-    await evaluate(result.stderr).toMatch(
-      "Reports missing or invalid --session value.",
-    );
+    expect(result.stdout).toContain("Usage: libretto-cli");
   });
 });
