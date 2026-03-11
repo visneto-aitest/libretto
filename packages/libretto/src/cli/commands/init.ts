@@ -154,6 +154,10 @@ function checkAiRuntimeConfiguration(): void {
 				console.log(
 					`    Detected available commands: ${availableCommands.join(", ")}`,
 				);
+			} else {
+				console.log(
+					"    No codex, claude, or gemini analyzer command was detected on PATH.",
+				);
 			}
 			console.log("    Reconfigure with:");
 			printAiConfigureCommands("      ");
@@ -175,7 +179,7 @@ function checkAiRuntimeConfiguration(): void {
 			`    Detected available commands: ${availableCommands.join(", ")}`,
 		);
 	} else {
-		console.log("    codex, claude, and gemini are not currently available to configure.");
+		console.log("    No codex, claude, or gemini analyzer command was detected on PATH.");
 	}
 	console.log("    Configure one with:");
 	printAiConfigureCommands("      ");
