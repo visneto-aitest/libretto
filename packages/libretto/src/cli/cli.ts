@@ -13,11 +13,12 @@ import {
   ensureLibrettoSetup,
 } from "./core/context.js";
 import {
-  SESSION_DEFAULT,
+  listSessionsWithStateFile,
   validateSessionName,
 } from "./core/session.js";
 
-const AUTO_SESSION_COMMANDS = new Set(["open", "run"]);
+const AUTO_SESSION_COMMANDS = new Set(["open", "run", "connect"]);
+const SESSION_OPTIONAL_COMMANDS = new Set(["help", "--help", "-h", "init", "ai"]);
 
 const CLI_COMMANDS = new Set([
   "open",
@@ -57,8 +58,8 @@ Commands:
 
 Options:
   --session <name>        Use a named session
-                          If omitted for open/run, a session id is auto-generated
-                          Other commands default to "default"
+                          If omitted for open/run/connect, a session id is auto-generated
+                          All other stateful commands require --session
                           Built-in sessions: default, dev-server, browser-agent
 
 Examples:
@@ -114,18 +115,18 @@ function filterSessionArgs(args: string[]): string[] {
   return result;
 }
 
-function parseSessionForLog(rawArgs: string[]): string {
+function parseSessionForLog(rawArgs: string[]): string | null {
   const idx = rawArgs.indexOf("--session");
-  if (idx < 0) return SESSION_DEFAULT;
+  if (idx < 0) return null;
   const value = rawArgs[idx + 1];
   if (!value || value.startsWith("--") || CLI_COMMANDS.has(value)) {
-    return SESSION_DEFAULT;
+    return null;
   }
   try {
     validateSessionName(value);
     return value;
   } catch {
-    return SESSION_DEFAULT;
+    return null;
   }
 }
 
@@ -133,31 +134,82 @@ function hasExplicitSession(rawArgs: string[]): boolean {
   return rawArgs.includes("--session");
 }
 
-function generateSessionId(command: string): string {
-  const timePart = Date.now().toString(36);
-  const randomPart = Math.random().toString(36).slice(2, 10);
-  return `${command}-${timePart}-${randomPart}`;
+function randomSessionId(): string {
+  const digits = Math.floor(Math.random() * 10_000)
+    .toString()
+    .padStart(4, "0");
+  return `ses-${digits}`;
+}
+
+function generateSessionId(): string {
+  const activeSessions = new Set(listSessionsWithStateFile());
+  for (let attempt = 0; attempt < 10_000; attempt += 1) {
+    const candidate = randomSessionId();
+    if (!activeSessions.has(candidate)) {
+      return candidate;
+    }
+  }
+  throw new Error(
+    "Could not generate an available session id. Close an existing session and try again.",
+  );
+}
+
+function commandNeedsSession(
+  command: string,
+  rawArgs: string[],
+  filteredArgs: string[],
+): boolean {
+  if (AUTO_SESSION_COMMANDS.has(command)) return false;
+  if (SESSION_OPTIONAL_COMMANDS.has(command)) return false;
+  if (command === "close" && rawArgs.includes("--all")) return false;
+  if (command === "exec" && filteredArgs.length <= 1) return false;
+  if (command === "save" && filteredArgs.length <= 1) return false;
+  if (!CLI_COMMANDS.has(command)) return false;
+  return true;
 }
 
 function resolveSessionArgs(rawArgs: string[]): {
   args: string[];
   generatedSession: string | null;
+  resolvedSession: string | null;
 } {
   const filtered = filterSessionArgs(rawArgs);
   const command = filtered[0];
+  const explicitSession = parseSessionForLog(rawArgs);
   if (!command) {
-    return { args: rawArgs, generatedSession: null };
-  }
-  if (!AUTO_SESSION_COMMANDS.has(command)) {
-    return { args: rawArgs, generatedSession: null };
+    return {
+      args: rawArgs,
+      generatedSession: null,
+      resolvedSession: explicitSession,
+    };
   }
   if (hasExplicitSession(rawArgs)) {
-    return { args: rawArgs, generatedSession: null };
+    return {
+      args: rawArgs,
+      generatedSession: null,
+      resolvedSession: explicitSession,
+    };
   }
-  const generatedSession = generateSessionId(command);
+  if (!AUTO_SESSION_COMMANDS.has(command)) {
+    if (commandNeedsSession(command, rawArgs, filtered)) {
+      throw new Error(
+        [
+          `Missing required --session for "${command}".`,
+          "Pass --session <name>, or use open/run/connect without --session to auto-create one.",
+        ].join("\n"),
+      );
+    }
+    return {
+      args: rawArgs,
+      generatedSession: null,
+      resolvedSession: null,
+    };
+  }
+  const generatedSession = generateSessionId();
   return {
     args: [...rawArgs, "--session", generatedSession],
     generatedSession,
+    resolvedSession: generatedSession,
   };
 }
 
@@ -173,41 +225,19 @@ function validateLegacySessionArg(rawArgs: string[]): void {
   validateSessionName(value);
 }
 
-function initializeLogger(rawArgs: string[]): Logger {
-  const sessionForLog = parseSessionForLog(rawArgs);
-  const logger = createLoggerForSession(sessionForLog);
-  logger.info("cli-start", {
-    args: rawArgs,
-    cwd: process.cwd(),
-    session: sessionForLog,
-  });
-  return logger;
-}
-
-async function withCliLogger<T>(
-  rawArgs: string[],
-  run: (logger: Logger) => Promise<T>,
-): Promise<T> {
-  const logger = initializeLogger(rawArgs);
-  try {
-    return await run(logger);
-  } finally {
-    await closeLogger(logger);
-  }
-}
-
 function createParser(logger: Logger): Argv {
   let parser: Argv = (yargs(hideBin(process.argv)) as Argv)
     .scriptName("libretto-cli")
     .parserConfiguration({ "populate--": true })
     .option("session", {
       type: "string",
-      default: SESSION_DEFAULT,
       describe: "Use a named session",
       global: true,
     })
     .middleware((argv) => {
-      validateSessionName(String(argv.session));
+      if (argv.session !== undefined) {
+        validateSessionName(String(argv.session));
+      }
     })
     .exitProcess(false)
     .help(false)
@@ -232,41 +262,47 @@ function createParser(logger: Logger): Argv {
 
 export async function runLibrettoCLI(): Promise<void> {
   const rawArgs = process.argv.slice(2);
-  const { args: effectiveArgs, generatedSession } = resolveSessionArgs(rawArgs);
+  validateLegacySessionArg(rawArgs);
+  const {
+    args: effectiveArgs,
+    generatedSession,
+    resolvedSession,
+  } = resolveSessionArgs(rawArgs);
   let exitCode = 0;
   ensureLibrettoSetup();
-  await withCliLogger(effectiveArgs, async (logger) => {
-    try {
-      validateLegacySessionArg(rawArgs);
+  const args = filterSessionArgs(effectiveArgs);
+  const command = args[0];
 
-      const args = filterSessionArgs(effectiveArgs);
-      const command = args[0];
+  if (!command || command === "--help" || command === "-h" || command === "help") {
+    printUsage();
+    process.exit(exitCode);
+    return;
+  }
 
-      if (!command || command === "--help" || command === "-h" || command === "help") {
-        printUsage();
-        return;
-      }
+  if (!CLI_COMMANDS.has(command)) {
+    console.error(`Unknown command: ${command}\n`);
+    printUsage();
+    process.exit(1);
+    return;
+  }
 
-      if (!CLI_COMMANDS.has(command)) {
-        console.error(`Unknown command: ${command}\n`);
-        printUsage();
-        exitCode = 1;
-        return;
-      }
-
-      const parser = createParser(logger);
-      logger.info("cli-command", {
-        command,
-        args,
-        generatedSession,
-      });
-      await parser.parseAsync(effectiveArgs);
-    } catch (err) {
-      logger.error("cli-error", { error: err, args: rawArgs, effectiveArgs });
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(message);
-      exitCode = 1;
-    }
-  });
+  const sessionForLogger = resolvedSession ?? "cli";
+  const logger = createLoggerForSession(sessionForLogger);
+  try {
+    const parser = createParser(logger);
+    await parser.parseAsync(effectiveArgs);
+  } catch (err) {
+    logger.error("cli-error", {
+      error: err,
+      args: rawArgs,
+      effectiveArgs,
+      generatedSession,
+    });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(message);
+    exitCode = 1;
+  } finally {
+    await closeLogger(logger);
+  }
   process.exit(exitCode);
 }
