@@ -5,6 +5,20 @@ import { test } from "./fixtures";
 
 const SNAPSHOT_PRESETS = ["codex", "claude", "gemini"] as const;
 
+function extractReturnedSessionId(output: string): string | null {
+  const patterns = [
+    /\(session:\s*([a-zA-Z0-9._-]+)\)/i,
+    /session id[:=]\s*([a-zA-Z0-9._-]+)/i,
+    /session[:=]\s*([a-zA-Z0-9._-]+)/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = output.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+  return null;
+}
+
 async function writeFakeAnalyzer(workspaceDir: string): Promise<string> {
   const analyzerPath = join(workspaceDir, "fake-analyzer.mjs");
   await writeFile(
@@ -140,6 +154,18 @@ describe("state-driven CLI subprocess behavior", () => {
       "Couldn't run analysis: --objective is required when providing --context.",
     );
   }, 45_000);
+
+  test("open without --session returns a session id usable by snapshot", async ({
+    librettoCli,
+  }) => {
+    const opened = await librettoCli("open https://example.com --headless");
+    expect(opened.stdout).toContain("Browser open");
+    const session = extractReturnedSessionId(`${opened.stdout}\n${opened.stderr}`);
+    expect(session).toMatch(/^ses-\d{4}$/);
+
+    const snapshot = await librettoCli(`snapshot --session ${session}`);
+    expect(snapshot.stdout).toContain("Screenshot saved:");
+  }, 60_000);
 
   test("shows a clear error when opening an already active session", async ({
     librettoCli,
