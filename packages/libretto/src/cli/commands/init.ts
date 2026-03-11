@@ -62,6 +62,12 @@ function printAiConfigureCommands(prefix: string = "    "): void {
 	}
 }
 
+function printDifferentAnalyzerHint(prefix: string = "    "): void {
+	console.log(
+		`${prefix}Use npx libretto ai configure <gemini|claude|codex> to configure a different AI analyzer.`,
+	);
+}
+
 function getSkillSourceDir(): string {
 	// Resolve relative to this file's location in the package
 	const thisDir = dirname(fileURLToPath(import.meta.url));
@@ -124,10 +130,17 @@ function checkAiRuntimeConfiguration(): void {
 	const availableCommands = detectAvailableAiRuntimeCommands();
 
 	console.log("\nAI runtime configuration:");
+	console.log(
+		"  Libretto can use your coding agent as a subagent to analyze snapshots and other page signals.",
+	);
+	console.log(
+		"  This is optional, but it significantly improves page understanding and debugging performance.",
+	);
 	if (configReadError) {
 		console.log(`  \u2717 Could not read AI config: ${configReadError}`);
 		console.log("    Reconfigure with:");
 		printAiConfigureCommands("      ");
+		printDifferentAnalyzerHint("    ");
 		return;
 	}
 
@@ -144,6 +157,7 @@ function checkAiRuntimeConfiguration(): void {
 			}
 			console.log("    Reconfigure with:");
 			printAiConfigureCommands("      ");
+			printDifferentAnalyzerHint("    ");
 			return;
 		}
 
@@ -151,6 +165,7 @@ function checkAiRuntimeConfiguration(): void {
 			`  \u2713 Configured (${config.preset}): ${formatCommandPrefix(config.commandPrefix)}`,
 		);
 		console.log("    Analysis commands are ready to use.");
+		printDifferentAnalyzerHint("    ");
 		return;
 	}
 
@@ -164,6 +179,7 @@ function checkAiRuntimeConfiguration(): void {
 	}
 	console.log("    Configure one with:");
 	printAiConfigureCommands("      ");
+	printDifferentAnalyzerHint("    ");
 	console.log("    Optionally provide a custom command prefix with '-- ...'.");
 }
 
