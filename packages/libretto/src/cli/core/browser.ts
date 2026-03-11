@@ -346,6 +346,10 @@ const NETWORK_LOG = '${escapedNetworkLogPath}';
 const ACTIONS_LOG = '${escapedActionsLogPath}';
 mkdirSync(dirname(NETWORK_LOG), { recursive: true });
 
+// tsx/esbuild may emit __name() wrappers in Function#toString output.
+const __name = (target, value) =>
+	Object.defineProperty(target, 'name', { value, configurable: true });
+
 ${installSessionTelemetry.toString()}
 
 function logAction(entry) {
