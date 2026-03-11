@@ -6,25 +6,12 @@ It is designed for engineering teams that automate workflows in web apps and wan
 
 ## Installation
 
-Install Libretto in your project:
+Install Libretto in your project with your favorite package manager:
 
-`npm`:
 ```bash
 npm install libretto playwright zod
-```
-
-`yarn`:
-```bash
 yarn add libretto playwright zod
-```
-
-`bun`:
-```bash
 bun add libretto playwright zod
-```
-
-`pnpm`:
-```bash
 pnpm add libretto playwright zod
 ```
 
