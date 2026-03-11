@@ -9,10 +9,9 @@ const cliRoot = join(__dirname, "..");
 const distEntry = join(cliRoot, "dist", "cli", "index.js");
 
 if (!existsSync(distEntry)) {
-  // Build from the libretto monorepo root (builds core then CLI in order)
-  const monorepoRoot = join(cliRoot, "..", "..");
+  // Build from the package root (builds runtime then CLI in order).
   console.error("[libretto] dist not found, building...");
-  execSync("pnpm build", { cwd: monorepoRoot, stdio: "inherit" });
+  execSync("pnpm build", { cwd: cliRoot, stdio: "inherit" });
 }
 
 await import(distEntry);
