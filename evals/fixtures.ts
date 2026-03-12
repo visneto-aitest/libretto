@@ -22,7 +22,6 @@ import { ClaudeEvalHarness, ensureClaudeAuthConfigured } from "./harness.js";
 type EvalFixtures = {
   harness: ClaudeEvalHarness;
   repoRoot: string;
-  packageRoot: string;
   evalWorkspaceDir: string;
   evalWorkspacePath: (...parts: string[]) => string;
   copyEvalReference: (
@@ -87,11 +86,6 @@ export const test = base.extend<EvalFixtures>({
   repoRoot: async ({}, use) => {
     await use(repoRoot);
   },
-
-  packageRoot: async ({}, use) => {
-    await use(packageRoot);
-  },
-
   evalWorkspaceDir: async ({ task }, use) => {
     const workspaceDir = workspaceDirForTask(task);
     await rm(workspaceDir, { recursive: true, force: true });
