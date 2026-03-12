@@ -27,6 +27,9 @@ import type {
 } from "../workers/run-integration-worker-protocol.js";
 
 type ExecFunction = (...args: unknown[]) => Promise<unknown>;
+type RunIntegrationCommandRequest = RunIntegrationWorkerRequest & {
+  tsconfigPath?: string;
+};
 
 type StripTypeScriptTypesFn = (
   code: string,
@@ -467,7 +470,7 @@ async function runResume(session: string, logger: LoggerApi): Promise<void> {
 }
 
 async function runIntegrationFromFile(
-  args: RunIntegrationWorkerRequest,
+  args: RunIntegrationCommandRequest,
   logger: LoggerApi,
 ): Promise<void> {
   await stopExistingFailedRunSession(args.session, logger);
@@ -482,7 +485,14 @@ async function runIntegrationFromFile(
   const workerEntryPath = fileURLToPath(
     new URL("../workers/run-integration-worker.js", import.meta.url),
   );
-  const payload = JSON.stringify(args);
+  const payload = JSON.stringify({
+    integrationPath: args.integrationPath,
+    exportName: args.exportName,
+    session: args.session,
+    params: args.params,
+    headless: args.headless,
+    authProfileDomain: args.authProfileDomain,
+  } satisfies RunIntegrationWorkerRequest);
   const worker = spawn(process.execPath, [
     tsxCliPath,
     ...(args.tsconfigPath ? ["--tsconfig", args.tsconfigPath] : []),
