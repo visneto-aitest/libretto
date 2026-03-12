@@ -5,7 +5,7 @@
 	"scripts": {
 		"build": "pnpm -r build",
 		"type-check": "pnpm -r type-check",
-		"cli": "pnpm --filter libretto exec node bin/libretto.mjs",
+		"cli": "pnpm --filter libretto exec node dist/cli/index.js",
 		"dev": "pnpm --filter libretto build && pnpm --filter libretto exec node dist/cli/index.js",
 		"test": "pnpm --filter libretto test",
 		"eval": "pnpm --filter libretto eval",
