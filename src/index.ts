@@ -1,4 +1,5 @@
-import { normalize, sep } from "node:path";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // Logger
 export { Logger, defaultLogger, type LoggerApi, type MinimalLogger, type LoggerSink, type LogOptions } from "./shared/logger/logger.js";
@@ -102,16 +103,16 @@ export {
 	type LibrettoWorkflowHandler,
 } from "./shared/workflow/workflow.js";
 
-const isDistIndexEntrypoint = (): boolean => {
+const isDirectExecution = (): boolean => {
 	const entryArg = process.argv[1];
 	if (!entryArg) {
 		return false;
 	}
-	return normalize(entryArg).endsWith(`${sep}dist${sep}index.js`);
+	return pathToFileURL(resolve(entryArg)).href === import.meta.url;
 };
 
-if (isDistIndexEntrypoint()) {
-	void import("./cli/index.js")
+if (isDirectExecution()) {
+	void import("./cli/cli.js")
 		.then(({ runLibrettoCLI }) => runLibrettoCLI())
 		.catch((error: unknown) => {
 			const message = error instanceof Error ? error.stack ?? error.message : String(error);
