@@ -1,5 +1,5 @@
 import { describe } from "vitest";
-import { expect, test } from "./fixtures.js";
+import { test } from "./fixtures.js";
 
 type EvalScore = {
   percent: number;

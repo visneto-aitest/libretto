@@ -318,8 +318,8 @@ async function scoreTranscript(opts: {
     }
   }
 
-  const criteria = normalizedCriteria.map((criterion, index) => {
-    const matched = byCriterion.get(criterion) ?? parsedCriteria?.[index];
+  const criteria = normalizedCriteria.map((criterion) => {
+    const matched = byCriterion.get(criterion);
     if (matched) {
       return {
         criterion,
