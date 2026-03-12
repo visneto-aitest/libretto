@@ -112,9 +112,7 @@ const isDirectExecution = (): boolean => {
 };
 
 if (isDirectExecution()) {
-	void import("./cli/cli.js")
-		.then(({ runLibrettoCLI }) => runLibrettoCLI())
-		.catch((error: unknown) => {
+	void import("./cli/index.js").catch((error: unknown) => {
 			const message = error instanceof Error ? error.stack ?? error.message : String(error);
 			process.stderr.write(`${message}\n`);
 			process.exitCode = 1;
