@@ -56,6 +56,8 @@ In v1, framework output stays human-first. `SimpleCLI` will own rendering and st
 
 - Expose the internal CLI procedure builder as a public package API if external integrations need to register custom commands.
 - Add machine-mode output (`--json`) with command-level typed success/error payload schemas.
+- Add typed middleware input/output context propagation so middleware can enrich `ctx` for downstream middleware and handlers with compile-time types.
+- Revisit framework-owned handler result envelopes only if we need stronger centralized rendering later; avoid requiring commands to return structured payload objects by default.
 - Add command composition utilities for nested command groups (`ai configure`, future namespaces) with less boilerplate.
 - Add optional framework-level `--dry-run` support for mutating commands.
 - Add richer framework-provided failure context blocks when diagnostics quality needs to be improved.
@@ -197,28 +199,11 @@ await app.run(["help", "ai", "configure"]);
 //   -- <args...>  Command prefix after --
 ```
 
-### Phase 3: Add centralized human renderer and handler result contract
+### Phase 3: Skip framework-owned handler envelopes for now
 
-- [ ] Define `SimpleCLI` handler return envelope for human mode (success/error + next-step/no-further-action markers).
-- [ ] Add centralized human renderer in `SimpleCLI`:
-- [ ] success primary output on `stdout`,
-- [ ] diagnostics/recovery/help hints on `stderr`,
-- [ ] deterministic wording and ordering.
-- [ ] Migrate one command (`ai configure`) to return envelope and render through framework.
-- [ ] Success criteria: renderer tests pass and `ai configure` output remains compatible with existing stateful tests.
-- [ ] Example target shape:
-
-```ts
-return {
-  ok: false,
-  error: "Invalid JSON in --params",
-  recovery: [
-    "Pass valid JSON to --params.",
-    "Or use --params-file <path> with a valid JSON file.",
-  ],
-  helpHint: "libretto-cli help run",
-};
-```
+- [ ] Do not require commands to return structured success/error envelopes.
+- [ ] Keep command return values and output handling lightweight until real command migration shows a concrete need for more framework-owned rendering.
+- [ ] Reassess renderer ownership after migrating a few real commands onto `SimpleCLI`.
 
 ### Phase 4: Migrate command input contracts to `{ positionals, named }`
 
