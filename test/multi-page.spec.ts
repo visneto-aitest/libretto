@@ -36,9 +36,25 @@ describe("multi-page CLI behavior", () => {
     const multiplePageLines = multiplePagesResult.stdout.trimEnd().split("\n");
     expect(multiplePageLines[0]).toBe("Open pages:");
     expect(multiplePageLines).toHaveLength(3);
-    expect(multiplePageLines.slice(1).every((line) => /^  id=[^\s]+ url=/.test(line))).toBe(true);
-    expect(multiplePageLines.some((line) => line.includes("https://example.com/"))).toBe(true);
-    expect(multiplePageLines.some((line) => line.includes("data:text/html,multi-page-secondary"))).toBe(true);
+    expect(
+      multiplePageLines
+        .slice(1)
+        .every((line) => /^  id=[^\s]+ url=/.test(line)),
+    ).toBe(true);
+    expect(
+      multiplePageLines.some((line) =>
+        /^  id=[^\s]+ url=https:\/\/example\.com\/?( active=(true|false))?$/.test(
+          line,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      multiplePageLines.some((line) =>
+        /^  id=[^\s]+ url=data:text\/html,multi-page-secondary( active=(true|false))?$/.test(
+          line,
+        ),
+      ),
+    ).toBe(true);
   }, 45_000);
 
   test("exec requires --page when multiple pages are open", async ({
