@@ -1,5 +1,6 @@
 import type { Argv } from "yargs";
 import type { LoggerApi } from "../../shared/logger/index.js";
+import { z } from "zod";
 import {
   runClose as runCloseWithLogger,
   runCloseAll as runCloseAllWithLogger,
@@ -8,38 +9,56 @@ import {
   runSave,
 } from "../core/browser.js";
 import { withSessionLogger } from "../core/context.js";
+import { SESSION_DEFAULT, validateSessionName } from "../core/session.js";
+import { SimpleCLI } from "../framework/simple-cli.js";
+
+function createSessionSchema() {
+  return z.string().default(SESSION_DEFAULT).superRefine((value, ctx) => {
+    try {
+      validateSessionName(value);
+    } catch (err) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  });
+}
+
+export const openInput = SimpleCLI.input({
+  positionals: [
+    SimpleCLI.positional("url", z.string().optional(), {
+      help: "URL to open",
+    }),
+  ],
+  named: {
+    session: SimpleCLI.option(createSessionSchema(), {
+      help: "Use a named session",
+    }),
+    headed: SimpleCLI.flag({ help: "Run browser in headed mode" }),
+    headless: SimpleCLI.flag({ help: "Run browser in headless mode" }),
+  },
+}).refine((input) => !(input.headed && input.headless), "Cannot pass both --headed and --headless.");
+
+export function createOpenCommand(logger: LoggerApi) {
+  return SimpleCLI.command({
+    description: "Launch browser and open URL (headed by default)",
+  })
+    .input(openInput)
+    .handle(async ({ input }) => {
+      if (!input.url) {
+        throw new Error(
+          "Usage: libretto-cli open <url> [--headless] [--session <name>]",
+        );
+      }
+
+      const headed = input.headed || !input.headless;
+      await runOpen(input.url, headed, input.session, logger);
+    });
+}
 
 export function registerBrowserCommands(yargs: Argv, logger: LoggerApi): Argv {
   return yargs
-    .command(
-      "open [url]",
-      "Launch browser and open URL (headed by default)",
-      (cmd) =>
-        cmd
-          .option("headed", {
-            type: "boolean",
-            default: false,
-          })
-          .option("headless", {
-            type: "boolean",
-            default: false,
-          }),
-      async (argv) => {
-        const hasHeadedFlag = Boolean(argv.headed);
-        const hasHeadlessFlag = Boolean(argv.headless);
-        if (hasHeadedFlag && hasHeadlessFlag) {
-          throw new Error("Cannot pass both --headed and --headless.");
-        }
-        const headed = hasHeadedFlag || !hasHeadlessFlag;
-        const url = argv.url as string | undefined;
-        if (!url) {
-          throw new Error(
-            "Usage: libretto-cli open <url> [--headless] [--session <name>]",
-          );
-        }
-        await runOpen(url, headed, String(argv.session), logger);
-      },
-    )
     .command(
       "save [urlOrDomain]",
       "Save current browser session",
