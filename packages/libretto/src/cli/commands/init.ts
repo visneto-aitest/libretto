@@ -1,9 +1,10 @@
-import type { Argv } from "yargs";
 import { existsSync, mkdirSync, cpSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { z } from "zod";
 import { REPO_ROOT } from "../core/context.js";
+import { SimpleCLI } from "../framework/simple-cli.js";
 
 function getSkillSourceDir(): string {
 	// Resolve relative to this file's location in the package
@@ -76,37 +77,39 @@ function checkSnapshotLLM(): void {
 	}
 }
 
-export function registerInitCommand(yargs: Argv): Argv {
-	return yargs.command(
-		"init",
-		"Initialize libretto in the current project",
-		(cmd) =>
-			cmd.option("skip-browsers", {
-				type: "boolean",
-				default: false,
-				describe: "Skip Playwright Chromium installation",
-			}),
-		(argv) => {
-			console.log("Initializing libretto...\n");
+export const initInput = SimpleCLI.input({
+	positionals: [],
+	named: {
+		skipBrowsers: SimpleCLI.flag({
+			name: "skip-browsers",
+			help: "Skip Playwright Chromium installation",
+		}),
+	},
+});
 
-			console.log("Copying skill files...");
-			try {
-				copySkills();
-			} catch (err) {
-				console.error(
-					`  \u2717 ${err instanceof Error ? err.message : String(err)}`,
-				);
-			}
+export const initCommand = SimpleCLI.command({
+	description: "Initialize libretto in the current project",
+})
+	.input(initInput)
+	.handle(async ({ input }) => {
+		console.log("Initializing libretto...\n");
 
-			if (!argv["skip-browsers"]) {
-				installBrowsers();
-			} else {
-				console.log("\nSkipping browser installation (--skip-browsers)");
-			}
+		console.log("Copying skill files...");
+		try {
+			copySkills();
+		} catch (err) {
+			console.error(
+				`  \u2717 ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
 
-			checkSnapshotLLM();
+		if (!input.skipBrowsers) {
+			installBrowsers();
+		} else {
+			console.log("\nSkipping browser installation (--skip-browsers)");
+		}
 
-			console.log("\n\u2713 libretto init complete");
-		},
-	);
-}
+		checkSnapshotLLM();
+
+		console.log("\n\u2713 libretto init complete");
+	});

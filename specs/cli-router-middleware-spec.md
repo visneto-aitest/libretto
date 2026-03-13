@@ -235,15 +235,14 @@ const app = SimpleCLI.define("libretto", {
 
 ### Phase 4: Migrate command input contracts to `{ positionals, named }`
 
-- [ ] Migrate `ai`, `init`, and one browser command (`open`) to `SimpleCLI.input(...)`.
-- [ ] Preserve existing validation/error text for mutually exclusive flags and missing required arguments.
-- [ ] Ensure handlers consume typed `input` and stop reading raw `argv`.
-- [ ] Success criteria: migrated commands pass existing tests; command modules no longer require handler-time casts for migrated commands.
-- [ ] Example target shape:
+- [x] Migrate `ai`, `init`, and one browser command (`open`) to `SimpleCLI.input(...)`.
+- [x] Preserve existing validation/error text for mutually exclusive flags and missing required arguments.
+- [x] Ensure handlers consume typed `input` and stop reading raw `argv`.
+- [x] Dispatch migrated commands through a partial `SimpleCLI` app from `cli.ts` while the remaining commands stay on yargs until the bootstrap migration phase.
+- [x] Success criteria: migrated commands pass existing tests; command modules no longer require handler-time casts for migrated commands.
+- [x] Example target shape:
 
 ```ts
-type OpenInput = SimpleCLI.InferInput<typeof openInput>;
-
 const openCommand = SimpleCLI.command({ description: "Launch browser and open URL (headed by default)" })
   .input(openInput)
   .handle(async ({ input }) => {

@@ -20,6 +20,15 @@ describe("basic CLI subprocess behavior", () => {
     expect(result.stderr).toBe("");
   });
 
+  test("prints scoped help for migrated SimpleCLI commands", async ({
+    librettoCli,
+  }) => {
+    const result = await librettoCli("help ai configure");
+    expect(result.stdout).toContain("Configure AI runtime");
+    expect(result.stdout).toContain("Usage: libretto-cli ai configure [preset] [options]");
+    expect(result.stderr).toBe("");
+  });
+
   test("fails unknown command with a clear error", async ({
     librettoCli,
     evaluate,

@@ -1,11 +1,11 @@
 import yargs, { type Argv } from "yargs";
 import { hideBin } from "yargs/helpers";
 import type { Logger } from "../shared/logger/index.js";
-import { registerAICommands } from "./commands/ai.js";
-import { registerBrowserCommands } from "./commands/browser.js";
+import { aiCommands } from "./commands/ai.js";
+import { createOpenCommand, registerBrowserCommands } from "./commands/browser.js";
 import { registerExecutionCommands } from "./commands/execution.js";
 import { registerLogCommands } from "./commands/logs.js";
-import { registerInitCommand } from "./commands/init.js";
+import { initCommand } from "./commands/init.js";
 import { registerSnapshotCommands } from "./commands/snapshot.js";
 import {
   closeLogger,
@@ -16,6 +16,7 @@ import {
   SESSION_DEFAULT,
   validateSessionName,
 } from "./core/session.js";
+import { SimpleCLI } from "./framework/simple-cli.js";
 
 const CLI_COMMANDS = new Set([
   "open",
@@ -137,6 +138,31 @@ function validateLegacySessionArg(rawArgs: string[]): void {
   validateSessionName(value);
 }
 
+function createMigratedSimpleCLI(logger: Logger) {
+  return SimpleCLI.define("libretto-cli", {
+    ai: aiCommands,
+    init: initCommand,
+    open: createOpenCommand(logger),
+  });
+}
+
+function shouldHandleWithSimpleCLI(
+  rawArgs: readonly string[],
+  filteredArgs: readonly string[],
+): boolean {
+  const command = filteredArgs[0];
+  if (command === "open" || command === "init" || command === "ai") {
+    return true;
+  }
+
+  if (rawArgs[0] === "help") {
+    const helpTarget = rawArgs[1];
+    return helpTarget === "open" || helpTarget === "init" || helpTarget === "ai";
+  }
+
+  return false;
+}
+
 function initializeLogger(rawArgs: string[]): Logger {
   const sessionForLog = parseSessionForLog(rawArgs);
   const logger = createLoggerForSession(sessionForLog);
@@ -184,9 +210,7 @@ function createParser(logger: Logger): Argv {
   parser = registerBrowserCommands(parser, logger);
   parser = registerExecutionCommands(parser, logger);
   parser = registerLogCommands(parser);
-  parser = registerAICommands(parser);
   parser = registerSnapshotCommands(parser, logger);
-  parser = registerInitCommand(parser);
   parser = parser.command("help", "Show usage", () => {}, () => {
     printUsage();
   });
@@ -204,6 +228,16 @@ export async function runLibrettoCLI(): Promise<void> {
 
       const args = filterSessionArgs(rawArgs);
       const command = args[0];
+
+      if (shouldHandleWithSimpleCLI(rawArgs, args)) {
+        const simpleCLI = createMigratedSimpleCLI(logger);
+        logger.info("cli-command", { command, args: rawArgs });
+        const result = await simpleCLI.run(rawArgs);
+        if (typeof result === "string") {
+          console.log(result);
+        }
+        return;
+      }
 
       if (!command || command === "--help" || command === "-h" || command === "help") {
         printUsage();
