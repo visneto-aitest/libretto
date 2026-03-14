@@ -301,24 +301,36 @@ function readJsonFileIfExists(path: string): unknown {
   }
 }
 
-function readFailureMessage(path: string): string | null {
+function readFailureDetails(path: string): {
+  message?: string;
+  phase?: "setup" | "workflow";
+} | null {
   const raw = readJsonFileIfExists(path);
   if (!raw || typeof raw !== "object") return null;
+
   const message = (raw as { message?: unknown }).message;
-  return typeof message === "string" ? message : null;
+  const phase = (raw as { phase?: unknown }).phase;
+
+  return {
+    message: typeof message === "string" ? message : undefined,
+    phase: phase === "setup" || phase === "workflow" ? phase : undefined,
+  };
 }
 
-async function waitForFailureMessage(
+async function waitForFailureDetails(
   path: string,
   timeoutMs = 1_000,
-): Promise<string | null> {
+): Promise<{
+  message?: string;
+  phase?: "setup" | "workflow";
+} | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const message = readFailureMessage(path);
-    if (message) return message;
+    const details = readFailureDetails(path);
+    if (details?.message) return details;
     await new Promise((resolveWait) => setTimeout(resolveWait, 25));
   }
-  return readFailureMessage(path);
+  return readFailureDetails(path);
 }
 
 function streamOutputSince(path: string, offset: number): number {
@@ -337,6 +349,7 @@ type WaitForWorkflowOutcomeArgs = {
 type WorkflowOutcome = {
   status: "completed" | "paused" | "failed" | "exited";
   message?: string;
+  phase?: "setup" | "workflow";
 };
 
 function clearSignalIfExists(path: string): void {
@@ -362,8 +375,12 @@ async function waitForWorkflowOutcome(
 
     if (existsSync(signalPaths.failedSignalPath)) {
       outputOffset = streamOutputSince(signalPaths.outputSignalPath, outputOffset);
-      const message = await waitForFailureMessage(signalPaths.failedSignalPath);
-      return { status: "failed", message: message ?? undefined };
+      const failureDetails = await waitForFailureDetails(signalPaths.failedSignalPath);
+      return {
+        status: "failed",
+        message: failureDetails?.message,
+        phase: failureDetails?.phase,
+      };
     }
 
     if (existsSync(signalPaths.completedSignalPath)) {
@@ -505,9 +522,12 @@ async function runIntegrationFromFile(
   }
   if (outcome.status === "failed") {
     setSessionStatus(args.session, "failed", logger);
-    throw new Error(
-      `${outcome.message ?? "Workflow failed during run."}\nBrowser is still open. You can use \`exec\` to inspect it. Call \`run\` to re-run the workflow.`,
-    );
+    if (outcome.phase === "workflow") {
+      throw new Error(
+        `${outcome.message ?? "Workflow failed during run."}\nBrowser is still open. You can use \`exec\` to inspect it. Call \`run\` to re-run the workflow.`,
+      );
+    }
+    throw new Error(outcome.message ?? "Workflow failed during run.");
   }
   if (outcome.status === "exited") {
     setSessionStatus(args.session, "exited", logger);
