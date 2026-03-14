@@ -309,6 +309,8 @@ export const main = workflow({}, async () => {
     await evaluate(result.stderr).toMatch(
       "Reports that importing the integration module failed because of a TypeScript compilation error and includes guidance to pass --tsconfig <path>.",
     );
+    expect(result.stderr).not.toContain("Browser is still open.");
+    expect(result.stderr).not.toContain("use `exec` to inspect it");
   }, 45_000);
 
   test("accepts branded Libretto workflow contract across module boundaries", async ({
