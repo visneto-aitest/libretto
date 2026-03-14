@@ -437,13 +437,25 @@ export const main = workflow({}, async (ctx) => {
     );
   });
 
-  test("fails when --session value is another command token", async ({
+  test("allows session names that match command tokens", async ({
     librettoCli,
     evaluate,
   }) => {
-    const result = await librettoCli("help --session open");
+    const result = await librettoCli("pages --session open");
+    expect(result.stdout).toBe("");
     await evaluate(result.stderr).toMatch(
-      "Reports that the session flag is missing or invalid.",
+      'Explains that session "open" does not exist, no active sessions are available, and suggests opening a session with libretto-cli open <url> --session open.',
+    );
+  });
+
+  test("ignores --session tokens after passthrough --", async ({
+    librettoCli,
+    evaluate,
+  }) => {
+    const result = await librettoCli('ai configure codex -- --session open');
+    expect(result.stderr).toBe("");
+    await evaluate(result.stdout).toMatch(
+      "Confirms the AI config was saved.",
     );
   });
 });

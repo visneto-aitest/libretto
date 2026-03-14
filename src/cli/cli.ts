@@ -8,7 +8,7 @@ import {
   SESSION_DEFAULT,
   validateSessionName,
 } from "./core/session.js";
-import { createCLIApp, CLI_ROOT_COMMANDS } from "./router.js";
+import { createCLIApp } from "./router.js";
 
 function renderUsage(app: ReturnType<typeof createCLIApp>): string {
   return `${app.renderHelp()}
@@ -58,11 +58,27 @@ Sessions:
 `;
 }
 
+function readSessionArgBeforePassthrough(
+  rawArgs: readonly string[],
+): string | null | undefined {
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const token = rawArgs[index];
+    if (token === "--") return undefined;
+    if (token !== "--session") continue;
+
+    const value = rawArgs[index + 1];
+    if (!value || value === "--" || value.startsWith("--")) {
+      return null;
+    }
+    return value;
+  }
+
+  return undefined;
+}
+
 function parseSessionForLog(rawArgs: string[]): string {
-  const idx = rawArgs.indexOf("--session");
-  if (idx < 0) return SESSION_DEFAULT;
-  const value = rawArgs[idx + 1];
-  if (!value || value.startsWith("--") || CLI_ROOT_COMMANDS.includes(value)) {
+  const value = readSessionArgBeforePassthrough(rawArgs);
+  if (value === undefined || value === null) {
     return SESSION_DEFAULT;
   }
   try {
@@ -74,10 +90,9 @@ function parseSessionForLog(rawArgs: string[]): string {
 }
 
 function validateLegacySessionArg(rawArgs: string[]): void {
-  const idx = rawArgs.indexOf("--session");
-  if (idx < 0) return;
-  const value = rawArgs[idx + 1];
-  if (!value || value.startsWith("--") || CLI_ROOT_COMMANDS.includes(value)) {
+  const value = readSessionArgBeforePassthrough(rawArgs);
+  if (value === undefined) return;
+  if (value === null) {
     throw new Error(
       "Usage: libretto-cli <command> [--session <name>]\nMissing or invalid --session value.",
     );
