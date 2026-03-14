@@ -521,8 +521,9 @@ async function runIntegrationFromFile(
 
 export const execInput = SimpleCLI.input({
   positionals: [
-    SimpleCLI.positional("code", z.string().optional(), {
+    SimpleCLI.positional("codeParts", z.array(z.string()).default([]), {
       help: "Playwright TypeScript code to execute",
+      variadic: true,
     }),
   ],
   named: {
@@ -531,7 +532,7 @@ export const execInput = SimpleCLI.input({
     page: pageOption(),
   },
 }).refine(
-  (input) => Boolean(input.code),
+  (input) => input.codeParts.length > 0,
   "Usage: libretto-cli exec <code> [--session <name>] [--visualize]",
 );
 
@@ -544,7 +545,7 @@ export function createExecCommand(logger: LoggerApi) {
     .use(loadSessionStateMiddleware)
     .handle(async ({ input, ctx }) => {
       await runExec(
-        input.code!,
+        input.codeParts.join(" "),
         ctx.session,
         logger,
         input.visualize,

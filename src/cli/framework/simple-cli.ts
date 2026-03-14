@@ -276,6 +276,7 @@ export type SimpleCLIPositionalDefinition<
   key: TKey;
   schema: TSchema;
   help?: string;
+  variadic?: boolean;
 };
 
 export type SimpleCLINamedArgDefinition<TSchema extends ZodTypeAny> = {
@@ -893,15 +894,27 @@ function validateParsedPositionals(
   definitions: SimpleCLIPositionalsDefinition,
   positionals: readonly string[],
 ): void {
-  if (positionals.length > definitions.length) {
+  const variadicDefinition = definitions.find((definition) => definition.variadic);
+  if (!variadicDefinition && positionals.length > definitions.length) {
     throw new Error(`Unexpected arguments for ${command.path.join(" ")}.`);
   }
 
   definitions.forEach((definition, index) => {
-    if (positionals[index] !== undefined) return;
+    const value = definition.variadic
+      ? positionals.slice(index)
+      : positionals[index];
+    if (value !== undefined && (!Array.isArray(value) || value.length > 0)) return;
     if (schemaAcceptsUndefined(definition.schema)) return;
     throw new Error(`Missing required argument <${definition.key}>.`);
   });
+}
+
+function validateInputDefinition(definition: SimpleCLIInputDefinition): void {
+  const variadicIndex = definition.positionals.findIndex((positional) => positional.variadic);
+  if (variadicIndex < 0) return;
+  if (variadicIndex !== definition.positionals.length - 1) {
+    throw new Error("Variadic positional arguments must be the last positional.");
+  }
 }
 
 function validateRequiredNamedArgs(
@@ -1020,7 +1033,9 @@ function buildInputNormalizer<
     const named = raw.named ?? {};
 
     definition.positionals.forEach((positional, index) => {
-      output[positional.key] = positionals[index];
+      output[positional.key] = positional.variadic
+        ? positionals.slice(index)
+        : positionals[index];
     });
 
     for (const [key, spec] of Object.entries(definition.named)) {
@@ -1080,13 +1095,14 @@ function buildInputSchema<
 function positional<TKey extends string, TSchema extends ZodTypeAny>(
   key: TKey,
   schema: TSchema,
-  options?: { help?: string },
+  options?: { help?: string; variadic?: boolean },
 ): SimpleCLIPositionalDefinition<TKey, TSchema> {
   return {
     kind: "positional",
     key,
     schema,
     help: options?.help,
+    variadic: options?.variadic,
   };
 }
 
@@ -1123,6 +1139,7 @@ function input<
   positionals: TPositionals;
   named: TNamed;
 }): SimpleCLIInput<InputObjectFor<TPositionals, TNamed>> {
+  validateInputDefinition(definition);
   return new SimpleCLIInput(
     buildInputNormalizer(definition),
     buildInputSchema(definition),
