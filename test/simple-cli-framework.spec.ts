@@ -288,6 +288,27 @@ describe("SimpleCLI framework", () => {
     });
   });
 
+  test("supports variadic positional arguments", async () => {
+    const execInput = SimpleCLI.input({
+      positionals: [
+        SimpleCLI.positional("codeParts", z.array(z.string()).default([]), {
+          variadic: true,
+        }),
+      ],
+      named: {},
+    }).refine((input) => input.codeParts.length > 0, "Usage: libretto exec <code>");
+
+    const app = SimpleCLI.define("libretto", {
+      exec: SimpleCLI.command({ description: "exec" })
+        .input(execInput)
+        .handle(async ({ input }) => input.codeParts.join(" ")),
+    });
+
+    await expect(
+      app.run(["exec", "await", "page.goto('https://example.com')"]),
+    ).resolves.toBe("await page.goto('https://example.com')");
+  });
+
   test("surfaces command-level input normalization errors from run", async () => {
     const openInput = SimpleCLI.input({
       positionals: [

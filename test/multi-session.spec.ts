@@ -92,6 +92,17 @@ export const main = workflow({}, async () => {
     );
   });
 
+  test("exec accepts unquoted multi-token code", async ({
+    librettoCli,
+    evaluate,
+  }) => {
+    const result = await librettoCli("exec await page.title()");
+    await evaluate(result.stderr).toMatch(
+      'Explains that the default session is missing, that no active sessions exist, and suggests starting one with "libretto-cli open <url> --session default".',
+    );
+    expect(result.stderr).not.toContain("Unexpected arguments for exec.");
+  });
+
   test("close --all works without --session", async ({ librettoCli }) => {
     await librettoCli("open https://example.com --headless");
     await librettoCli("open https://example.com --headless --session close-all-second");
