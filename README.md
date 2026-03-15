@@ -10,15 +10,13 @@ It is designed for engineering teams that automate workflows in web apps and wan
 npm install --save-dev libretto
 ```
 
-This installs Libretto along with Playwright and Chromium. The Chromium browser binary is downloaded automatically via a `postinstall` script — this may take a minute on first install.
-
-Then initialize Libretto:
+Chromium is downloaded automatically via a `postinstall` script. If postinstall scripts are disabled (e.g. `--ignore-scripts`, common in monorepos), run init manually:
 
 ```bash
 npx libretto init
 ```
 
-This verifies your Chromium installation and optionally configures an AI runtime for snapshot analysis.
+This installs the Chromium browser binary and optionally configures an AI runtime for snapshot analysis.
 
 ## Usage
 
