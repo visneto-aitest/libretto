@@ -16,7 +16,7 @@ Chromium is downloaded automatically via a `postinstall` script. If postinstall 
 npx libretto init
 ```
 
-This installs the Chromium browser binary and optionally configures an AI runtime for snapshot analysis.
+This installs the Chromium browser binary and optionally configures an AI subagent (Gemini, Claude, or Codex) that can analyze page snapshots without consuming the coding agent's context window.
 
 ## Usage
 
