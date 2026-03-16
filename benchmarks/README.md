@@ -3,7 +3,7 @@
 Benchmarks are live browser-agent tasks that run a coding agent with:
 
 - the repo-local Libretto CLI via `pnpm cli`
-- the Libretto skill injected through the Claude eval harness
+- the Libretto skill discovered through Claude's filesystem Skills API
 - a preconfigured snapshot analyzer so `pnpm cli snapshot` works during the run
 - default benchmark models of `claude-opus-4-6` for the main agent and `claude-sonnet-4-6` for snapshot analysis
 
@@ -46,7 +46,7 @@ Each run gets its own isolated benchmark workspace. That workspace contains:
 
 - a copied `dist/` build of the Libretto CLI
 - a local `package.json` with `pnpm cli` pointing directly at `dist/cli/index.js`
-- a copied `.agents/skills/libretto/SKILL.md`
+- a copied `.claude/skills/libretto/` skill directory
 - its own `.libretto/` runtime state and benchmark snapshot-analyzer config
 
 Each per-case `results.json` now also records Claude-reported usage and `totalCostUsd`, and the generated benchmark summary includes a run-level duration/cost table plus per-case duration and cost.
