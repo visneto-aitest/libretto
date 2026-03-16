@@ -300,9 +300,8 @@ export const initCommand = SimpleCLI.command({
       console.log("\nSkipping browser installation (--skip-browsers)");
     }
 
-    await copySkills();
-
     if (process.stdin.isTTY) {
+      await copySkills();
       await runInteractiveApiSetup();
     } else {
       printSnapshotApiStatus();
