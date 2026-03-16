@@ -221,6 +221,43 @@ describe("SimpleCLI framework", () => {
     });
   });
 
+  test("does not treat help flags after passthrough as CLI help", async () => {
+    const aiConfigureInput = SimpleCLI.input({
+      positionals: [
+        SimpleCLI.positional("preset", z.string().optional()),
+      ],
+      named: {
+        passthrough: SimpleCLI.option(z.array(z.string()).default([]), {
+          source: "--",
+        }),
+      },
+    });
+
+    const app = SimpleCLI.define("libretto", {
+      ai: SimpleCLI.group({
+        description: "AI commands",
+        routes: {
+          configure: SimpleCLI.command({ description: "Configure AI runtime" })
+            .input(aiConfigureInput)
+            .handle(async ({ input }) => input),
+        },
+      }),
+    });
+
+    const result = await app.run([
+      "ai",
+      "configure",
+      "openai",
+      "--",
+      "--help",
+    ]);
+
+    expect(result).toEqual({
+      preset: "openai",
+      passthrough: ["--help"],
+    });
+  });
+
   test("parses named option aliases and applies defaults", async () => {
     const openInput = SimpleCLI.input({
       positionals: [
