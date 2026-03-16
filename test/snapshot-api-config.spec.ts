@@ -62,7 +62,7 @@ describe("snapshot API model resolution", () => {
     vi.stubEnv("GEMINI_API_KEY", "test-gemini-key");
 
     expect(resolveSnapshotApiModel(null)).toMatchObject({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-3-flash-preview",
       provider: "google",
       source: "env:auto-google",
     });
@@ -73,7 +73,7 @@ describe("snapshot API model resolution", () => {
     vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test-gemini-key");
 
     expect(resolveSnapshotApiModel(null)).toMatchObject({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-3-flash-preview",
       provider: "google",
       source: "env:auto-google",
     });

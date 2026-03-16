@@ -50,7 +50,7 @@ describe("state-driven CLI subprocess behavior", () => {
     expect(configure.stdout).toContain("AI config saved.");
 
     const show = await librettoCli("ai configure");
-    expect(show.stdout).toContain("Model: google/gemini-2.5-flash");
+    expect(show.stdout).toContain("Model: google/gemini-3-flash-preview");
   });
 
   test("configures vertex provider", async ({ librettoCli }) => {
@@ -107,7 +107,7 @@ describe("state-driven CLI subprocess behavior", () => {
         GCLOUD_PROJECT: "",
       },
     );
-    expect(snapshot.stderr).toContain("No API snapshot analyzer is available");
+    expect(snapshot.stderr).toContain("No API snapshot analyzer is configured.");
   }, 45_000);
 
   test("shows a clear error when --context is provided without --objective", async ({
