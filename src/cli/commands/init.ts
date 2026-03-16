@@ -56,8 +56,16 @@ function promptUser(rl: ReturnType<typeof createInterface>, question: string): P
   });
 }
 
+function safeReadAiConfig(): ReturnType<typeof readAiConfig> {
+  try {
+    return readAiConfig();
+  } catch {
+    return null;
+  }
+}
+
 function printSnapshotApiStatus(): void {
-  const config = readAiConfig();
+  const config = safeReadAiConfig();
   const selection = resolveSnapshotApiModel(config);
   const envPath = join(REPO_ROOT, ".env");
 
@@ -91,7 +99,7 @@ function printSnapshotApiStatus(): void {
 }
 
 async function runInteractiveApiSetup(): Promise<void> {
-  const config = readAiConfig();
+  const config = safeReadAiConfig();
   const selection = resolveSnapshotApiModel(config);
   const envPath = join(REPO_ROOT, ".env");
 
@@ -176,7 +184,7 @@ async function runInteractiveApiSetup(): Promise<void> {
     // Reload env and verify
     loadSnapshotEnv();
     process.env[selected.envVar] = apiKeyValue;
-    const newSelection = resolveSnapshotApiModel(readAiConfig());
+    const newSelection = resolveSnapshotApiModel(safeReadAiConfig());
     if (newSelection && hasProviderCredentials(newSelection.provider)) {
       console.log(`  \u2713 Snapshot API ready: ${newSelection.model}`);
     }

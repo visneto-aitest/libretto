@@ -8,15 +8,9 @@ import {
   resolveSnapshotApiModel,
 } from "../src/cli/core/snapshot-api-config.js";
 
-function makeConfig(
-  preset: AiConfig["preset"],
-  commandPrefix: string[],
-  model?: string,
-): AiConfig {
+function makeConfig(model: string): AiConfig {
   return {
-    preset,
-    commandPrefix,
-    ...(model ? { model } : {}),
+    model,
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -37,22 +31,29 @@ describe("snapshot API model resolution", () => {
     });
   });
 
-  it("maps the built-in codex preset to the OpenAI API model", () => {
+  it("uses config model when set", () => {
     vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
-    const config = makeConfig("codex", [
-      "codex",
-      "exec",
-      "--skip-git-repo-check",
-      "--sandbox",
-      "read-only",
-    ]);
+    const config = makeConfig("openai/gpt-5.4");
 
     expect(resolveSnapshotApiModel(config)).toMatchObject({
       model: "openai/gpt-5.4",
       provider: "openai",
-      source: "ai-config",
+      source: "config",
+    });
+  });
+
+  it("uses config model for anthropic", () => {
+    vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+
+    const config = makeConfig("anthropic/claude-sonnet-4-6");
+
+    expect(resolveSnapshotApiModel(config)).toMatchObject({
+      model: "anthropic/claude-sonnet-4-6",
+      provider: "anthropic",
+      source: "config",
     });
   });
 
@@ -68,75 +69,62 @@ describe("snapshot API model resolution", () => {
     });
   });
 
-  it("maps the built-in gemini preset to Gemini API when GEMINI_API_KEY is present", () => {
+  it("auto-detects Gemini when GEMINI_API_KEY is present", () => {
     vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
     vi.stubEnv("GEMINI_API_KEY", "test-gemini-key");
 
-    const config = makeConfig("gemini", [
-      "gemini",
-      "--output-format",
-      "json",
-    ]);
-
-    expect(resolveSnapshotApiModel(config)).toMatchObject({
-      model: "google/gemini-2.5-pro",
+    expect(resolveSnapshotApiModel(null)).toMatchObject({
+      model: "google/gemini-2.5-flash",
       provider: "google",
-      source: "ai-config",
+      source: "env:auto-google",
     });
   });
 
-  it("maps the built-in gemini preset to Gemini API when GOOGLE_GENERATIVE_AI_API_KEY is present", () => {
+  it("auto-detects Gemini when GOOGLE_GENERATIVE_AI_API_KEY is present", () => {
     vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
     vi.stubEnv("GOOGLE_GENERATIVE_AI_API_KEY", "test-gemini-key");
 
-    const config = makeConfig("gemini", [
-      "gemini",
-      "--output-format",
-      "json",
-    ]);
-
-    expect(resolveSnapshotApiModel(config)).toMatchObject({
-      model: "google/gemini-2.5-pro",
+    expect(resolveSnapshotApiModel(null)).toMatchObject({
+      model: "google/gemini-2.5-flash",
       provider: "google",
-      source: "ai-config",
+      source: "env:auto-google",
     });
   });
 
-  it("maps the built-in gemini preset to Vertex when only GOOGLE_CLOUD_PROJECT is present", () => {
+  it("auto-detects Vertex when only GOOGLE_CLOUD_PROJECT is present", () => {
     vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
     vi.stubEnv("GOOGLE_CLOUD_PROJECT", "test-project");
 
-    const config = makeConfig("gemini", [
-      "gemini",
-      "--output-format",
-      "json",
-    ]);
-
-    expect(resolveSnapshotApiModel(config)).toMatchObject({
+    expect(resolveSnapshotApiModel(null)).toMatchObject({
       model: "vertex/gemini-2.5-pro",
       provider: "vertex",
-      source: "ai-config",
+      source: "env:auto-vertex",
     });
   });
 
-  it("honors an explicit Vertex model override on the gemini preset", () => {
+  it("LIBRETTO_SNAPSHOT_MODEL overrides config model", () => {
     vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
-    vi.stubEnv("GOOGLE_CLOUD_PROJECT", "test-project");
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    vi.stubEnv("LIBRETTO_SNAPSHOT_MODEL", "anthropic/claude-sonnet-4-6");
 
-    const config = makeConfig(
-      "gemini",
-      [
-        "gemini",
-        "--output-format",
-        "json",
-      ],
-      "vertex/gemini-2.5-pro",
-    );
+    const config = makeConfig("openai/gpt-5.4");
 
     expect(resolveSnapshotApiModel(config)).toMatchObject({
-      model: "vertex/gemini-2.5-pro",
-      provider: "vertex",
-      source: "ai-config",
+      model: "anthropic/claude-sonnet-4-6",
+      provider: "anthropic",
+      source: "env:LIBRETTO_SNAPSHOT_MODEL",
+    });
+  });
+
+  it("falls back to auto-detection even when config exists", () => {
+    vi.stubEnv("LIBRETTO_DISABLE_DOTENV", "1");
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+
+    // Config with no model — should still auto-detect from env
+    expect(resolveSnapshotApiModel(null)).toMatchObject({
+      model: "openai/gpt-5.4",
+      provider: "openai",
+      source: "env:auto-openai",
     });
   });
 });
@@ -193,7 +181,6 @@ describe("buildInlinePromptSelection", () => {
       "<html><body><button data-testid=\"submit\">Submit</button></body></html>",
       "<html><body><button data-testid=\"submit\">Submit</button></body></html>",
       "openai/gpt-5.4",
-      "codex",
     );
 
     expect(selection.domSource).toBe("full");
@@ -220,7 +207,6 @@ describe("buildInlinePromptSelection", () => {
       fullHtml,
       condensedHtml,
       "openai/gpt-5.4",
-      "codex",
     );
 
     expect(selection.domSource).toBe("condensed");

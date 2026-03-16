@@ -1,27 +1,25 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { z } from "zod";
 import { LIBRETTO_CONFIG_PATH } from "./context.js";
 
 export const CURRENT_CONFIG_VERSION = 1;
 
-export const AiPresetSchema = z.enum(["codex", "claude", "gemini"]);
-export type AiPreset = z.infer<typeof AiPresetSchema>;
-const AI_CONFIG_PRESET_INPUTS = ["codex", "claude", "gemini", "google-vertex-ai"] as const;
-const AI_CONFIG_PRESET_USAGE = AI_CONFIG_PRESET_INPUTS.join("|");
-
-type AiConfigurePresetResolution = {
-  preset: AiPreset;
-  model?: string;
-};
-
+/**
+ * AI configuration schema.
+ *
+ * The `model` field is a provider/model-id string (e.g. "openai/gpt-5.4",
+ * "anthropic/claude-sonnet-4-6", "google/gemini-2.5-flash", "vertex/gemini-2.5-pro").
+ *
+ * Legacy note: earlier versions stored a `preset` (codex|claude|gemini) and
+ * `commandPrefix` (CLI args to spawn a sub-agent process). That approach has
+ * been replaced by direct API calls via the Vercel AI SDK. The legacy CLI-agent
+ * code is preserved in snapshot-analyzer.ts but is not wired into the snapshot
+ * command.
+ */
 export const AiConfigSchema = z
   .object({
-    preset: AiPresetSchema,
-    commandPrefix: z.array(z.string()).min(1),
-    /** Model override for the sub-agent session (e.g. "claude-sonnet-4-6", "o4-mini"). */
-    model: z.string().optional(),
+    model: z.string().min(1),
     updatedAt: z.string(),
   })
   .strict();
@@ -42,28 +40,16 @@ export const LibrettoConfigSchema = z
   .passthrough();
 export type LibrettoConfig = z.infer<typeof LibrettoConfigSchema>;
 
-export const AI_CONFIG_PRESETS: Record<AiPreset, Omit<AiConfig, "updatedAt">> = {
-  codex: {
-    preset: "codex",
-    commandPrefix: ["codex", "exec", "--skip-git-repo-check", "--sandbox", "read-only"],
-  },
-  claude: {
-    preset: "claude",
-    commandPrefix: [join(homedir(), ".claude", "local", "claude"), "-p"],
-  },
-  gemini: {
-    preset: "gemini",
-    commandPrefix: ["gemini", "--output-format", "json"],
-  },
+/** Default models for each provider shorthand accepted by `ai configure`. */
+const DEFAULT_MODELS: Record<string, string> = {
+  openai: "openai/gpt-5.4",
+  anthropic: "anthropic/claude-sonnet-4-6",
+  gemini: "google/gemini-2.5-flash",
+  google: "google/gemini-2.5-flash",
+  vertex: "vertex/gemini-2.5-pro",
 };
 
-export function isDefaultCommandPrefixForPreset(config: AiConfig): boolean {
-  const expected = AI_CONFIG_PRESETS[config.preset].commandPrefix;
-  return (
-    config.commandPrefix.length === expected.length
-    && config.commandPrefix.every((value, index) => value === expected[index])
-  );
-}
+const CONFIGURE_PROVIDERS = Object.keys(DEFAULT_MODELS);
 
 function invalidConfigError(configPath: string): Error {
   return new Error(
@@ -102,26 +88,13 @@ export function readAiConfig(configPath: string = LIBRETTO_CONFIG_PATH): AiConfi
   return readLibrettoConfig(configPath).ai ?? null;
 }
 
-function quoteShellArg(value: string): string {
-  if (/^[a-zA-Z0-9_./:@=-]+$/.test(value)) return value;
-  return JSON.stringify(value);
-}
-
-export function formatCommandPrefix(prefix: string[]): string {
-  return prefix.map((arg) => quoteShellArg(arg)).join(" ");
-}
-
 export function writeAiConfig(
-  preset: AiPreset,
-  commandPrefix: string[],
+  model: string,
   configPath: string = LIBRETTO_CONFIG_PATH,
-  extra?: { model?: string },
 ): AiConfig {
   const librettoConfig = readLibrettoConfig(configPath);
   const ai = AiConfigSchema.parse({
-    preset,
-    commandPrefix,
-    ...extra,
+    model,
     updatedAt: new Date().toISOString(),
   });
   writeLibrettoConfig(
@@ -149,46 +122,31 @@ export function clearAiConfig(configPath: string = LIBRETTO_CONFIG_PATH): boolea
 }
 
 function printAiConfig(config: AiConfig, configPath: string): void {
-  console.log(`AI preset: ${config.preset}`);
-  console.log(`Command prefix: ${formatCommandPrefix(config.commandPrefix)}`);
-  if (config.model) console.log(`Model: ${config.model}`);
+  console.log(`Model: ${config.model}`);
   console.log(`Config file: ${configPath}`);
   console.log(`Updated at: ${config.updatedAt}`);
 }
 
-function printConfigureUsage(commandName: string): void {
-  console.log(
-    `Usage: ${commandName} <${AI_CONFIG_PRESET_USAGE}>
-       ${commandName}
-       ${commandName} --clear`,
-  );
-}
+/**
+ * Resolve the model string from a `ai configure` argument.
+ * Accepts a provider shorthand ("openai", "anthropic", "gemini", "vertex")
+ * or a full provider/model-id string ("openai/gpt-4o", "anthropic/claude-sonnet-4-6").
+ */
+function resolveModelFromInput(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
 
-function resolveAiConfigurePreset(
-  presetArg: string | undefined,
-): AiConfigurePresetResolution | null {
-  switch (presetArg?.trim()) {
-    case "codex":
-      return { preset: "codex" };
-    case "claude":
-      return { preset: "claude" };
-    case "gemini":
-      return { preset: "gemini" };
-    case "google-vertex-ai":
-      return {
-        preset: "gemini",
-        model: "vertex/gemini-2.5-pro",
-      };
-    default:
-      return null;
-  }
+  // Full model string (contains a slash)
+  if (trimmed.includes("/")) return trimmed;
+
+  // Provider shorthand
+  return DEFAULT_MODELS[trimmed.toLowerCase()] ?? null;
 }
 
 export function runAiConfigure(
   input: {
     preset?: string;
     clear?: boolean;
-    customPrefix?: string[];
   },
   options: {
     configureCommandName?: string;
@@ -204,7 +162,7 @@ export function runAiConfigure(
   if (!presetArg && !input.clear) {
     const config = readAiConfig(configPath);
     if (!config) {
-      console.log(`No AI config set. Run '${configureCommandName} codex' to set one.`);
+      console.log(`No AI config set. Run '${configureCommandName} openai' to set one.`);
       return;
     }
     printAiConfig(config, configPath);
@@ -221,28 +179,19 @@ export function runAiConfigure(
     return;
   }
 
-  const resolvedPreset = resolveAiConfigurePreset(presetArg);
-  if (!resolvedPreset) {
-    printConfigureUsage(configureCommandName);
+  const model = resolveModelFromInput(presetArg!);
+  if (!model) {
+    console.log(
+      `Usage: ${configureCommandName} <${CONFIGURE_PROVIDERS.join("|")}|provider/model-id>\n` +
+      `       ${configureCommandName}\n` +
+      `       ${configureCommandName} --clear`,
+    );
     throw new Error(
-      `Missing or invalid preset. Use one of: ${AI_CONFIG_PRESET_INPUTS.join(", ")}.`,
+      `Invalid provider or model. Use one of: ${CONFIGURE_PROVIDERS.join(", ")}, or a full model string like "openai/gpt-4o".`,
     );
   }
 
-  const preset = resolvedPreset.preset;
-  const presetDefaults = AI_CONFIG_PRESETS[preset];
-  const customPrefix = input.customPrefix?.filter(Boolean);
-  const commandPrefix =
-    customPrefix && customPrefix.length > 0
-      ? customPrefix
-      : presetDefaults.commandPrefix;
-
-  const config = writeAiConfig(preset, commandPrefix, configPath, {
-    model: resolvedPreset.model ?? presetDefaults.model,
-  });
+  const config = writeAiConfig(model, configPath);
   console.log("AI config saved.");
-  if (presetArg === "google-vertex-ai") {
-    console.log("Configured Google Vertex AI via the Gemini preset.");
-  }
   printAiConfig(config, configPath);
 }

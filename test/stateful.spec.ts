@@ -1,5 +1,3 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { describe, expect } from "vitest";
 import { test } from "./fixtures";
 
@@ -17,38 +15,6 @@ function extractReturnedSessionId(output: string): string | null {
   return null;
 }
 
-async function writeFakeAnalyzer(workspaceDir: string): Promise<string> {
-  const analyzerPath = join(workspaceDir, "fake-analyzer.mjs");
-  await writeFile(
-    analyzerPath,
-    `
-import { writeFileSync } from "node:fs";
-
-const preset = process.argv[2] ?? "unknown";
-const args = process.argv.slice(3);
-const stdinChunks = [];
-for await (const chunk of process.stdin) {
-  stdinChunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-}
-const stdinText = Buffer.concat(stdinChunks).toString("utf8");
-const outputIndex = args.indexOf("--output-last-message");
-const outputPath = outputIndex >= 0 ? args[outputIndex + 1] : undefined;
-const payload = JSON.stringify({
-  answer: "snapshot-ok-" + preset,
-  selectors: [],
-  notes: "stdin-has-objective=" + stdinText.includes("Find heading") + ";argv-has-objective=" + args.some((arg) => arg.includes("Find heading")),
-});
-
-if (outputPath) {
-  writeFileSync(outputPath, payload, "utf8");
-}
-process.stdout.write(payload);
-`,
-    "utf8",
-  );
-  return analyzerPath;
-}
-
 describe("state-driven CLI subprocess behavior", () => {
   test("shows missing AI config", async ({ librettoCli }) => {
     const result = await librettoCli("ai configure");
@@ -58,11 +24,11 @@ describe("state-driven CLI subprocess behavior", () => {
   test("configures, shows, and clears AI config", async ({
     librettoCli,
   }) => {
-    const configure = await librettoCli("ai configure codex");
+    const configure = await librettoCli("ai configure openai");
     expect(configure.stdout).toContain("AI config saved.");
 
     const show = await librettoCli("ai configure");
-    expect(show.stdout).toContain("AI preset: codex");
+    expect(show.stdout).toContain("Model: openai/gpt-5.4");
 
     const clear = await librettoCli("ai configure --clear");
     expect(clear.stdout).toContain("Cleared AI config:");
@@ -71,39 +37,36 @@ describe("state-driven CLI subprocess behavior", () => {
     expect(showAfterClear.stdout).toContain("No AI config set.");
   });
 
-  test("configures gemini AI preset", async ({ librettoCli }) => {
+  test("configures anthropic provider", async ({ librettoCli }) => {
+    const configure = await librettoCli("ai configure anthropic");
+    expect(configure.stdout).toContain("AI config saved.");
+
+    const show = await librettoCli("ai configure");
+    expect(show.stdout).toContain("Model: anthropic/claude-sonnet-4-6");
+  });
+
+  test("configures gemini provider", async ({ librettoCli }) => {
     const configure = await librettoCli("ai configure gemini");
     expect(configure.stdout).toContain("AI config saved.");
 
     const show = await librettoCli("ai configure");
-    expect(show.stdout).toContain("AI preset: gemini");
+    expect(show.stdout).toContain("Model: google/gemini-2.5-flash");
   });
 
-  test("configures google-vertex-ai AI preset", async ({ librettoCli }) => {
-    const configure = await librettoCli("ai configure google-vertex-ai");
+  test("configures vertex provider", async ({ librettoCli }) => {
+    const configure = await librettoCli("ai configure vertex");
     expect(configure.stdout).toContain("AI config saved.");
-    expect(configure.stdout).toContain("Configured Google Vertex AI via the Gemini preset.");
 
     const show = await librettoCli("ai configure");
-    expect(show.stdout).toContain("AI preset: gemini");
     expect(show.stdout).toContain("Model: vertex/gemini-2.5-pro");
   });
 
-  test("configures custom AI command prefix and shows it", async ({
-    librettoCli,
-    workspaceDir,
-  }) => {
-    const analyzerPath = await writeFakeAnalyzer(workspaceDir);
-    const configure = await librettoCli(
-      `ai configure codex -- "${process.execPath}" "${analyzerPath}" "custom-prefix"`,
-    );
+  test("configures custom model string", async ({ librettoCli }) => {
+    const configure = await librettoCli("ai configure openai/gpt-4o");
     expect(configure.stdout).toContain("AI config saved.");
 
     const show = await librettoCli("ai configure");
-    expect(show.stdout).toContain("AI preset: codex");
-    expect(show.stdout).toContain(
-      `Command prefix: ${process.execPath} ${analyzerPath} custom-prefix`,
-    );
+    expect(show.stdout).toContain("Model: openai/gpt-4o");
   });
 
   test("snapshot without --objective captures files without analysis", async ({

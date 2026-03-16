@@ -1,9 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import {
-	AI_CONFIG_PRESETS,
 	type AiConfig,
-	isDefaultCommandPrefixForPreset,
 	readAiConfig,
 } from "./ai-config.js";
 import { REPO_ROOT } from "./context.js";
@@ -19,7 +17,7 @@ export const SNAPSHOT_MODEL_ENV_VAR = "LIBRETTO_SNAPSHOT_MODEL";
 const DEFAULT_SNAPSHOT_MODELS = {
 	openai: "openai/gpt-5.4",
 	anthropic: "anthropic/claude-sonnet-4-6",
-	google: "google/gemini-2.5-pro",
+	google: "google/gemini-2.5-flash",
 	vertex: "vertex/gemini-2.5-pro",
 } as const satisfies Record<Provider, string>;
 
@@ -28,7 +26,7 @@ export type SnapshotApiModelSelection = {
 	provider: Provider;
 	source:
 		| "env:LIBRETTO_SNAPSHOT_MODEL"
-		| "ai-config"
+		| "config"
 		| "env:auto-openai"
 		| "env:auto-anthropic"
 		| "env:auto-google"
@@ -122,38 +120,6 @@ export function parseDotEnvAssignment(
 	return { key, value };
 }
 
-function resolveModelFromConfig(config: AiConfig): string {
-	const modelOverride = config.model?.trim();
-	if (modelOverride) {
-		if (modelOverride.includes("/")) return modelOverride;
-		switch (config.preset) {
-			case "codex":
-				return `openai/${modelOverride}`;
-			case "claude":
-				return `anthropic/${modelOverride}`;
-			case "gemini":
-				if (hasProviderCredentials("google")) return `google/${modelOverride}`;
-				if (hasProviderCredentials("vertex")) return `vertex/${modelOverride}`;
-				return `google/${modelOverride}`;
-		}
-	}
-
-	switch (config.preset) {
-		case "codex":
-			return DEFAULT_SNAPSHOT_MODELS.openai;
-		case "claude":
-			return DEFAULT_SNAPSHOT_MODELS.anthropic;
-		case "gemini":
-			if (hasProviderCredentials("google")) {
-				return DEFAULT_SNAPSHOT_MODELS.google;
-			}
-			if (hasProviderCredentials("vertex")) {
-				return DEFAULT_SNAPSHOT_MODELS.vertex;
-			}
-			return DEFAULT_SNAPSHOT_MODELS.google;
-	}
-}
-
 function inferAutoSnapshotModel(): SnapshotApiModelSelection | null {
 	const providersInPriorityOrder: Provider[] = [
 		"openai",
@@ -174,6 +140,14 @@ function inferAutoSnapshotModel(): SnapshotApiModelSelection | null {
 	return null;
 }
 
+/**
+ * Resolve which API model to use for snapshot analysis.
+ *
+ * Priority:
+ * 1. Explicit LIBRETTO_SNAPSHOT_MODEL env var
+ * 2. Model from .libretto/config.json ai.model field
+ * 3. Auto-detect from available API credentials in env
+ */
 export function resolveSnapshotApiModel(
 	config: AiConfig | null = readAiConfig(),
 ): SnapshotApiModelSelection | null {
@@ -189,21 +163,16 @@ export function resolveSnapshotApiModel(
 		};
 	}
 
-	if (config && isDefaultCommandPrefixForPreset(config)) {
-		const model = resolveModelFromConfig(config);
-		const { provider } = parseModel(model);
+	if (config?.model) {
+		const { provider } = parseModel(config.model);
 		return {
-			model,
+			model: config.model,
 			provider,
-			source: "ai-config",
+			source: "config",
 		};
 	}
 
-	if (!config) {
-		return inferAutoSnapshotModel();
-	}
-
-	return null;
+	return inferAutoSnapshotModel();
 }
 
 export function resolveSnapshotApiModelOrThrow(
@@ -212,7 +181,7 @@ export function resolveSnapshotApiModelOrThrow(
 	const selection = resolveSnapshotApiModel(config);
 	if (!selection) {
 		throw new SnapshotApiUnavailableError(
-			"No API snapshot analyzer is available. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY/GOOGLE_GENERATIVE_AI_API_KEY, or GOOGLE_CLOUD_PROJECT, or configure a custom CLI analyzer with `libretto ai configure ... -- <command prefix...>`.",
+			"No API snapshot analyzer is available. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY/GOOGLE_GENERATIVE_AI_API_KEY, or GOOGLE_CLOUD_PROJECT, or run `npx libretto ai configure <provider>` to set a default model.",
 		);
 	}
 

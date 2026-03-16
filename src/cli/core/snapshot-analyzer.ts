@@ -22,11 +22,13 @@ import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { z } from "zod";
 import type { LoggerApi } from "../../shared/logger/index.js";
-import {
-  type AiConfig,
-  formatCommandPrefix,
-  readAiConfig,
-} from "./ai-config.js";
+// Used by the legacy CLI-agent path (UserCodingAgent) which is preserved but
+// not wired into the snapshot command. The active config schema (ai-config.ts)
+// no longer has preset/commandPrefix — this type is kept for the legacy code.
+type LegacyAiConfig = {
+  preset: "codex" | "claude" | "gemini";
+  commandPrefix: string[];
+};
 
 export type ScreenshotPair = {
   pngPath: string;
@@ -93,9 +95,9 @@ type InlinePromptSelection = {
 };
 
 abstract class UserCodingAgent {
-  protected constructor(protected readonly config: AiConfig) {}
+  protected constructor(protected readonly config: LegacyAiConfig) {}
 
-  static resolveFromConfig(config: AiConfig): UserCodingAgent {
+  static resolveFromConfig(config: LegacyAiConfig): UserCodingAgent {
     switch (config.preset) {
       case "codex":
         return new CodexUserCodingAgent(config);
@@ -106,8 +108,10 @@ abstract class UserCodingAgent {
     }
   }
 
-  static readConfiguredConfig(): AiConfig | null {
-    return readAiConfig();
+  static readConfiguredConfig(): LegacyAiConfig | null {
+    // Legacy: this would read from the old config format. Not used in the
+    // current API-based analysis path.
+    return null;
   }
 
   static getConfigured(): UserCodingAgent | null {
@@ -115,7 +119,7 @@ abstract class UserCodingAgent {
     return config ? this.resolveFromConfig(config) : null;
   }
 
-  get snapshotAnalyzerConfig(): AiConfig {
+  get snapshotAnalyzerConfig(): LegacyAiConfig {
     return this.config;
   }
 
@@ -146,7 +150,7 @@ abstract class UserCodingAgent {
     const result = await runExternalCommand(this.command, args, logger, stdinText);
     if (result.exitCode !== 0) {
       throw new Error(
-        `Analyzer command failed (${formatCommandPrefix([this.command, ...args])}).\n${stripAnsi(result.stderr).trim() || stripAnsi(result.stdout).trim() || "No error output."}`,
+        `Analyzer command failed (${[this.command, ...args].join(" ")}).\n${stripAnsi(result.stderr).trim() || stripAnsi(result.stdout).trim() || "No error output."}`,
       );
     }
     return result;
@@ -583,39 +587,38 @@ function estimateTokensFromChars(chars: number): number {
 }
 
 function inferContextWindowTokens(
-  model: string | undefined,
-  preset: AiConfig["preset"],
+  model: string,
 ): { contextWindowTokens: number; source: string } {
-  const normalizedModel = model?.trim().toLowerCase();
-  if (normalizedModel) {
-    if (normalizedModel.includes("claude")) {
-      return { contextWindowTokens: 200_000, source: "model:claude" };
-    }
-    if (
-      normalizedModel.includes("gpt-5")
-      || normalizedModel.includes("o3")
-      || normalizedModel.includes("o4")
-      || normalizedModel.includes("codex")
-    ) {
-      return { contextWindowTokens: 200_000, source: "model:openai" };
-    }
-    if (normalizedModel.includes("gemini")) {
-      return { contextWindowTokens: 1_000_000, source: "model:gemini" };
-    }
+  const normalized = model.trim().toLowerCase();
+  if (normalized.includes("claude")) {
+    return { contextWindowTokens: 200_000, source: "model:claude" };
   }
-
-  switch (preset) {
-    case "claude":
-      return { contextWindowTokens: 200_000, source: "preset:claude" };
-    case "codex":
-      return { contextWindowTokens: 200_000, source: "preset:codex" };
-    case "gemini":
-      return { contextWindowTokens: 1_000_000, source: "preset:gemini" };
+  if (
+    normalized.includes("gpt-5")
+    || normalized.includes("o3")
+    || normalized.includes("o4")
+  ) {
+    return { contextWindowTokens: 200_000, source: "model:openai" };
   }
+  if (normalized.includes("gemini")) {
+    return { contextWindowTokens: 1_000_000, source: "model:gemini" };
+  }
+  // Provider-based fallback from the provider/model-id format
+  if (normalized.startsWith("openai/") || normalized.startsWith("codex/")) {
+    return { contextWindowTokens: 200_000, source: "provider:openai" };
+  }
+  if (normalized.startsWith("anthropic/")) {
+    return { contextWindowTokens: 200_000, source: "provider:anthropic" };
+  }
+  if (normalized.startsWith("google/") || normalized.startsWith("vertex/")) {
+    return { contextWindowTokens: 1_000_000, source: "provider:google" };
+  }
+  // Conservative default
+  return { contextWindowTokens: 128_000, source: "default" };
 }
 
-function buildSnapshotBudget(model: string | undefined, preset: AiConfig["preset"]): SnapshotBudget {
-  const { contextWindowTokens, source } = inferContextWindowTokens(model, preset);
+function buildSnapshotBudget(model: string): SnapshotBudget {
+  const { contextWindowTokens, source } = inferContextWindowTokens(model);
   const outputReserveTokens = Math.min(
     32_000,
     Math.max(8_000, Math.floor(contextWindowTokens * 0.1)),
@@ -689,16 +692,15 @@ export function buildInlinePromptSelection(
   args: InterpretArgs,
   fullHtmlContent: string,
   condensedHtmlContent: string,
-  model: string | undefined,
-  preset: AiConfig["preset"],
+  model: string,
 ): InlinePromptSelection {
-  const budget = buildSnapshotBudget(model, preset);
+  const budget = buildSnapshotBudget(model);
   const stats: SnapshotDomStats = {
     fullDomChars: fullHtmlContent.length,
     fullDomEstimatedTokens: estimateTokensFromChars(fullHtmlContent.length),
     condensedDomChars: condensedHtmlContent.length,
     condensedDomEstimatedTokens: estimateTokensFromChars(condensedHtmlContent.length),
-    configuredModel: model ?? preset,
+    configuredModel: model,
   };
 
   const buildCandidate = (
@@ -853,12 +855,14 @@ export async function runInterpret(
   }
 
   const configuredAnalyzer = configuredAgent.snapshotAnalyzerConfig;
+  // Legacy path: derive a model string from the preset for budget estimation
+  const legacyModelMap = { codex: "openai/gpt-5.4", claude: "anthropic/claude-sonnet-4-6", gemini: "google/gemini-2.5-flash" };
+  const legacyModel = legacyModelMap[configuredAnalyzer.preset] ?? "openai/gpt-5.4";
   const selection = buildInlinePromptSelection(
     args,
     fullHtmlContent,
     condensedHtmlContent,
-    configuredAnalyzer.model,
-    configuredAnalyzer.preset,
+    legacyModel,
   );
   logger.info("interpret-analyzer-config", {
     preset: configuredAnalyzer.preset,
