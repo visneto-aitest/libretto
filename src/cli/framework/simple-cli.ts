@@ -473,13 +473,21 @@ export class SimpleCLIApp {
       return args.slice(1);
     }
 
-    if (isHelpFlag(args[0]!)) {
+    const passthroughIndex = args.indexOf("--");
+    const argsBeforePassthrough =
+      passthroughIndex >= 0 ? args.slice(0, passthroughIndex) : args;
+
+    if (argsBeforePassthrough.length === 0) {
+      return null;
+    }
+
+    if (isHelpFlag(argsBeforePassthrough[0]!)) {
       return [];
     }
 
-    const helpFlagIndex = args.findIndex((arg) => isHelpFlag(arg));
+    const helpFlagIndex = argsBeforePassthrough.findIndex((arg) => isHelpFlag(arg));
     if (helpFlagIndex >= 0) {
-      return args.slice(0, helpFlagIndex);
+      return argsBeforePassthrough.slice(0, helpFlagIndex);
     }
 
     return null;
