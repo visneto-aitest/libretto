@@ -21,26 +21,14 @@ import {
 import { readAiConfig, type AiConfig } from "./ai-config.js";
 import {
   resolveSnapshotApiModelOrThrow,
-  type SnapshotApiModelSelection,
 } from "./snapshot-api-config.js";
-
-function presetFromProvider(provider: string): AiConfig["preset"] {
-  switch (provider) {
-    case "openai":
-      return "codex";
-    case "anthropic":
-      return "claude";
-    default:
-      return "gemini";
-  }
-}
 
 export async function runApiInterpret(
   args: InterpretArgs,
   logger: LoggerApi,
   configuredAi: AiConfig | null = readAiConfig(),
 ): Promise<void> {
-  const selection: SnapshotApiModelSelection = resolveSnapshotApiModelOrThrow(configuredAi);
+  const selection = resolveSnapshotApiModelOrThrow(configuredAi);
 
   logger.info("api-interpret-start", {
     objective: args.objective,
@@ -54,13 +42,11 @@ export async function runApiInterpret(
   const fullHtmlContent = readFileSync(args.htmlPath, "utf-8");
   const condensedHtmlContent = readFileSync(args.condensedHtmlPath, "utf-8");
 
-  const preset = presetFromProvider(selection.provider);
   const promptSelection = buildInlinePromptSelection(
     args,
     fullHtmlContent,
     condensedHtmlContent,
     selection.model,
-    preset,
   );
 
   logger.info("api-interpret-dom-selection", {
