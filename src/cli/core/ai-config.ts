@@ -9,7 +9,7 @@ export const CURRENT_CONFIG_VERSION = 1;
  * AI configuration schema.
  *
  * The `model` field is a provider/model-id string (e.g. "openai/gpt-5.4",
- * "anthropic/claude-sonnet-4-6", "google/gemini-2.5-flash", "vertex/gemini-2.5-pro").
+ * "anthropic/claude-sonnet-4-6", "google/gemini-3-flash-preview", "vertex/gemini-2.5-pro").
  *
  * Legacy note: earlier versions stored a `preset` (codex|claude|gemini) and
  * `commandPrefix` (CLI args to spawn a sub-agent process). That approach has
@@ -44,25 +44,63 @@ export type LibrettoConfig = z.infer<typeof LibrettoConfigSchema>;
 const DEFAULT_MODELS: Record<string, string> = {
   openai: "openai/gpt-5.4",
   anthropic: "anthropic/claude-sonnet-4-6",
-  gemini: "google/gemini-2.5-flash",
-  google: "google/gemini-2.5-flash",
+  gemini: "google/gemini-3-flash-preview",
   vertex: "vertex/gemini-2.5-pro",
 };
 
-const CONFIGURE_PROVIDERS = Object.keys(DEFAULT_MODELS);
+const PROVIDER_ALIASES: Record<string, string> = {
+  claude: DEFAULT_MODELS.anthropic,
+  google: DEFAULT_MODELS.gemini,
+};
 
-function invalidConfigError(configPath: string): Error {
+const CONFIGURE_PROVIDERS = ["openai", "anthropic", "gemini", "vertex"] as const;
+
+function formatConfigureProviders(separator = " | "): string {
+  return CONFIGURE_PROVIDERS.join(separator);
+}
+
+function formatConfigIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `  - ${issue.path.join(".") || "root"}: ${issue.message}`)
+    .join("\n");
+}
+
+function formatExpectedConfigShape(): string {
+  return JSON.stringify(z.toJSONSchema(LibrettoConfigSchema), null, 2);
+}
+
+function invalidConfigError(configPath: string, detail?: string): Error {
   return new Error(
-    `AI config is invalid at ${configPath}. Fix the file to match the expected schema or delete it.`,
+    [
+      `AI config is invalid at ${configPath}.`,
+      detail ? `Problems:\n${detail}` : null,
+      "Expected JSON schema:",
+      formatExpectedConfigShape(),
+      "Notes:",
+      '  - "ai" and "viewport" are optional.',
+      '  - "ai.model" must be a provider/model string like "openai/gpt-5.4" or "anthropic/claude-sonnet-4-6".',
+      "Fix the file to match this schema, or delete it and rerun:",
+      `  npx libretto ai configure ${formatConfigureProviders()}`,
+    ].filter(Boolean).join("\n"),
   );
 }
 
 function parseConfig(raw: string, configPath: string): LibrettoConfig {
+  let parsedJson: unknown;
   try {
-    return LibrettoConfigSchema.parse(JSON.parse(raw));
-  } catch {
-    throw invalidConfigError(configPath);
+    parsedJson = JSON.parse(raw);
+  } catch (error) {
+    throw invalidConfigError(
+      configPath,
+      `  - root: Invalid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
+
+  const parsed = LibrettoConfigSchema.safeParse(parsedJson);
+  if (!parsed.success) {
+    throw invalidConfigError(configPath, formatConfigIssues(parsed.error));
+  }
+  return parsed.data;
 }
 
 export function readLibrettoConfig(
@@ -140,7 +178,8 @@ function resolveModelFromInput(input: string): string | null {
   if (trimmed.includes("/")) return trimmed;
 
   // Provider shorthand
-  return DEFAULT_MODELS[trimmed.toLowerCase()] ?? null;
+  const normalized = trimmed.toLowerCase();
+  return DEFAULT_MODELS[normalized] ?? PROVIDER_ALIASES[normalized] ?? null;
 }
 
 export function runAiConfigure(
@@ -162,7 +201,10 @@ export function runAiConfigure(
   if (!presetArg && !input.clear) {
     const config = readAiConfig(configPath);
     if (!config) {
-      console.log(`No AI config set. Run '${configureCommandName} openai' to set one.`);
+      console.log(
+        `No AI config set. Choose a default model: ${configureCommandName} ${formatConfigureProviders()}`,
+      );
+      console.log("Provider credentials still come from your shell or .env file.");
       return;
     }
     printAiConfig(config, configPath);
@@ -187,7 +229,7 @@ export function runAiConfigure(
       `       ${configureCommandName} --clear`,
     );
     throw new Error(
-      `Invalid provider or model. Use one of: ${CONFIGURE_PROVIDERS.join(", ")}, or a full model string like "openai/gpt-4o".`,
+      `Invalid provider or model. Use one of: ${formatConfigureProviders()}, or a full model string like "openai/gpt-4o".`,
     );
   }
 

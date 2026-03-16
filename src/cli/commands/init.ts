@@ -63,6 +63,18 @@ function safeReadAiConfig(): ReturnType<typeof readAiConfig> {
   }
 }
 
+function printInvalidAiConfigWarning(): void {
+  try {
+    readAiConfig();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.log("  ! Existing AI config is invalid:");
+    for (const line of message.split("\n")) {
+      console.log(`    ${line}`);
+    }
+  }
+}
+
 function printSnapshotApiStatus(): void {
   const config = safeReadAiConfig();
   const selection = resolveSnapshotApiModel(config);
@@ -73,6 +85,7 @@ function printSnapshotApiStatus(): void {
     "  Libretto uses direct API calls for snapshot analysis when supported credentials are available.",
   );
   console.log(`  Credentials are loaded from process env and ${envPath}.`);
+  printInvalidAiConfigWarning();
 
   if (selection && hasProviderCredentials(selection.provider)) {
     console.log(
@@ -107,6 +120,7 @@ async function runInteractiveApiSetup(): Promise<void> {
     "  Libretto uses direct API calls for snapshot analysis.",
   );
   console.log(`  Credentials are loaded from process env and ${envPath}.`);
+  printInvalidAiConfigWarning();
 
   if (selection && hasProviderCredentials(selection.provider)) {
     console.log(

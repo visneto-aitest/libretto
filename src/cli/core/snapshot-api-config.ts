@@ -4,7 +4,7 @@ import {
 	type AiConfig,
 	readAiConfig,
 } from "./ai-config.js";
-import { REPO_ROOT } from "./context.js";
+import { LIBRETTO_CONFIG_PATH, REPO_ROOT } from "./context.js";
 import {
 	hasProviderCredentials,
 	missingProviderCredentialsMessage,
@@ -15,7 +15,7 @@ import {
 const DEFAULT_SNAPSHOT_MODELS = {
 	openai: "openai/gpt-5.4",
 	anthropic: "anthropic/claude-sonnet-4-6",
-	google: "google/gemini-2.5-flash",
+	google: "google/gemini-3-flash-preview",
 	vertex: "vertex/gemini-2.5-pro",
 } as const satisfies Record<Provider, string>;
 
@@ -35,6 +35,101 @@ export class SnapshotApiUnavailableError extends Error {
 		super(message);
 		this.name = "SnapshotApiUnavailableError";
 	}
+}
+
+function formatIndented(lines: readonly string[], indent = "  "): string {
+	return lines.map((line) => `${indent}${line}`).join("\n");
+}
+
+function configuredSourceDescription(
+	source: SnapshotApiModelSelection["source"],
+): string {
+	switch (source) {
+		case "config":
+			return LIBRETTO_CONFIG_PATH;
+		case "env:auto-openai":
+		case "env:auto-anthropic":
+		case "env:auto-google":
+		case "env:auto-vertex":
+			return "process env / .env auto-detection";
+	}
+}
+
+function providerSetupLines(provider: Provider): string[] {
+	switch (provider) {
+		case "openai":
+			return [
+				"Set OPENAI_API_KEY in your shell or .env file.",
+				"Example: OPENAI_API_KEY=...",
+			];
+		case "anthropic":
+			return [
+				"Set ANTHROPIC_API_KEY in your shell or .env file.",
+				"Example: ANTHROPIC_API_KEY=...",
+			];
+		case "google":
+			return [
+				"Set GEMINI_API_KEY or GOOGLE_GENERATIVE_AI_API_KEY in your shell or .env file.",
+				"Example: GEMINI_API_KEY=...",
+			];
+		case "vertex":
+			return [
+				"Set GOOGLE_CLOUD_PROJECT (or GCLOUD_PROJECT).",
+				"Then run: gcloud auth application-default login",
+			];
+	}
+}
+
+function defaultModelCommandLine(): string {
+	return "npx libretto ai configure openai | anthropic | gemini | vertex";
+}
+
+function noSnapshotApiConfiguredMessage(): string {
+	return [
+		"No API snapshot analyzer is configured.",
+		"",
+		"Libretto checks for:",
+		formatIndented([
+			`a default model in ${LIBRETTO_CONFIG_PATH}`,
+			"provider credentials in process env or .env",
+		]),
+		"",
+		"To enable snapshot analysis:",
+		formatIndented([
+			"1. Add one provider credential:",
+			"   OPENAI_API_KEY=...",
+			"   ANTHROPIC_API_KEY=...",
+			"   GEMINI_API_KEY=...  # or GOOGLE_GENERATIVE_AI_API_KEY",
+			"   GOOGLE_CLOUD_PROJECT=...  # plus gcloud application-default login for Vertex",
+			"2. (Optional) Choose a default model:",
+			`   ${defaultModelCommandLine()}`,
+		]),
+		"",
+		"Then rerun:",
+		'  npx libretto snapshot --objective "<your objective>"',
+	].join("\n");
+}
+
+function missingProviderSnapshotMessage(
+	selection: SnapshotApiModelSelection,
+): string {
+	return [
+		`Snapshot analysis is configured to use ${selection.model} (${configuredSourceDescription(selection.source)}),`,
+		`but ${missingProviderCredentialsMessage(selection.provider)}`,
+		"",
+		"To fix it:",
+		formatIndented([
+			"1. Add the missing provider credential:",
+			...providerSetupLines(selection.provider).map((line) => `   ${line}`),
+			"2. Or switch the default model:",
+			`   ${defaultModelCommandLine()}`,
+			"3. Or clear the default model and rely on env auto-detection:",
+			"   npx libretto ai configure --clear",
+		]),
+		"",
+		"Then rerun:",
+		'  npx libretto snapshot --objective "<your objective>"',
+	].join("\n");
 }
 
 function readWorktreeEnvPath(): string | null {
@@ -167,13 +262,13 @@ export function resolveSnapshotApiModelOrThrow(
 	const selection = resolveSnapshotApiModel(config);
 	if (!selection) {
 		throw new SnapshotApiUnavailableError(
-			"No API snapshot analyzer is available. Set OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY/GOOGLE_GENERATIVE_AI_API_KEY, or GOOGLE_CLOUD_PROJECT, or run `npx libretto ai configure <provider>` to set a default model.",
+			noSnapshotApiConfiguredMessage(),
 		);
 	}
 
 	if (!hasProviderCredentials(selection.provider)) {
 		throw new SnapshotApiUnavailableError(
-			missingProviderCredentialsMessage(selection.provider),
+			missingProviderSnapshotMessage(selection),
 		);
 	}
 
