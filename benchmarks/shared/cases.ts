@@ -1,5 +1,5 @@
 import { cp, mkdir, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { expect } from "vitest";
 import { writeAiConfig } from "../../src/cli/core/ai-config.js";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
@@ -10,10 +10,10 @@ import {
 import type { ModelUsage, NonNullableUsage } from "@anthropic-ai/claude-agent-sdk";
 import {
   createClaudeBenchmarkHarness,
-  getBenchmarkAnalyzerPath,
   getBenchmarkDistPath,
   getBenchmarkPackageRoot,
-  getBenchmarkSkillPath,
+  getBenchmarkSkillSourcePath,
+  getBenchmarkWorkspaceSkillRelativePath,
 } from "./fixtures.js";
 
 export type BrowserBenchmarkCase = {
@@ -146,13 +146,16 @@ function extractFinalResultLine(transcript: string): string | null {
   return finalResultLine ?? null;
 }
 
-function buildPrompt(testCase: BrowserBenchmarkCase): string {
+export function buildBrowserBenchmarkPrompt(
+  testCase: BrowserBenchmarkCase,
+): string {
   const session = getSessionName(testCase);
+  const skillPath = `${getBenchmarkWorkspaceSkillRelativePath()}/SKILL.md`;
 
   return [
     `Run the ${testCase.benchmark} browser benchmark case "${testCase.title}".`,
     "Solve it by browsing the live website with the Libretto CLI installed in the current workspace.",
-    "The current workspace already contains the built Libretto CLI and the Libretto skill at .agents/skills/libretto/SKILL.md.",
+    `The current workspace already contains the built Libretto CLI and a Claude filesystem skill at ${skillPath}.`,
     "Do not change directories or reference any other libretto checkout.",
     "Run all commands from the current working directory and use `pnpm cli ...` directly.",
     "Do not inspect files under benchmarks/ to discover the answer.",
@@ -431,7 +434,7 @@ async function createWorkspaceAgentsFile(workspaceDir: string): Promise<void> {
       "",
       "- Stay in this workspace. Do not `cd` into any other directory or checkout.",
       "- Use the local Libretto CLI via `pnpm cli ...` from this directory.",
-      "- Use the local Libretto skill at `.agents/skills/libretto/SKILL.md`.",
+      "- Use the Claude-discovered Libretto skill at `.claude/skills/libretto/SKILL.md`.",
       "- Do not rely on any external libretto checkout or globally installed repo copy.",
       "",
     ].join("\n"),
@@ -450,15 +453,12 @@ async function createWorkspaceFiles(
   const distDestination = join(paths.workspaceDir, "dist");
   const skillDestination = join(
     paths.workspaceDir,
-    ".agents",
-    "skills",
-    "libretto",
-    "SKILL.md",
+    getBenchmarkWorkspaceSkillRelativePath(),
   );
 
   await cp(getBenchmarkDistPath(), distDestination, { recursive: true });
   await mkdir(dirname(skillDestination), { recursive: true });
-  await cp(getBenchmarkSkillPath(), skillDestination);
+  await cp(getBenchmarkSkillSourcePath(), skillDestination, { recursive: true });
   await createWorkspacePackageJson(paths.workspaceDir, testCase);
   await createWorkspaceAgentsFile(paths.workspaceDir);
 
@@ -676,18 +676,14 @@ async function withHarness<T>(
   run: (harness: ClaudeEvalHarness) => Promise<T>,
 ): Promise<T> {
   const harness = await createClaudeBenchmarkHarness(workspaceDir);
-  try {
-    return await run(harness);
-  } finally {
-    await harness.close();
-  }
+  return await run(harness);
 }
 
 export async function runBrowserBenchmarkCase(
   testCase: BrowserBenchmarkCase,
 ): Promise<EvalResponse> {
   const paths = getRunPaths(testCase);
-  const prompt = buildPrompt(testCase);
+  const prompt = buildBrowserBenchmarkPrompt(testCase);
   const startedAt = new Date();
 
   await createWorkspaceFiles(testCase, paths);

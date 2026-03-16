@@ -9,6 +9,7 @@ import {
   getBenchmarkRunHistoryPath,
   parseBenchmarkArgs,
 } from "../benchmarks/run.js";
+import { buildBrowserBenchmarkPrompt } from "../benchmarks/shared/cases.js";
 
 const tempRoots: string[] = [];
 
@@ -21,6 +22,21 @@ afterEach(async () => {
 });
 
 describe("benchmark launcher history", () => {
+  test("benchmark prompt points Claude to the filesystem skill path", () => {
+    const prompt = buildBrowserBenchmarkPrompt({
+      benchmark: "webVoyager",
+      id: "sample-case",
+      title: "Sample benchmark case",
+      startUrl: "https://example.com",
+      instruction: "Inspect the page and report the final title.",
+      successAssertion:
+        "The transcript includes the final page URL and title in FINAL_RESULT format.",
+    });
+
+    expect(prompt).toContain(".claude/skills/libretto/SKILL.md");
+    expect(prompt).not.toContain(".agents/skills/libretto/SKILL.md");
+  });
+
   test("defaults to all benchmarks when no benchmark filter is provided", () => {
     const parsed = parseBenchmarkArgs(["--testNamePattern", "FINAL_RESULT"]);
 

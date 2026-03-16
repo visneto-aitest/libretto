@@ -408,11 +408,12 @@ export function ensureClaudeAuthConfigured(): void {
 
 export type ClaudeEvalHarnessOptions = {
   cwd: string;
-  librettoSkillMarkdown: string;
+  systemPromptAppend?: string;
   model?: string;
   maxTurns?: number;
   permissionMode?: PermissionMode;
   settingSources?: SettingSource[];
+  allowedTools?: string[];
 };
 
 export type ClaudeEvalHarnessSendOptions = {
@@ -482,10 +483,10 @@ export class ClaudeEvalHarness {
   private readonly maxTurns: number;
   private readonly permissionMode: PermissionMode;
   private readonly settingSources: SettingSource[];
-  private readonly systemPromptAppend: string;
+  private readonly systemPromptAppend: string | null;
+  private readonly allowedTools: string[];
   private sessionId: string;
   private hasStarted = false;
-  private isClosed = false;
 
   constructor(options: ClaudeEvalHarnessOptions) {
     this.cwd = options.cwd;
@@ -493,12 +494,9 @@ export class ClaudeEvalHarness {
     this.maxTurns = options.maxTurns ?? 20;
     this.permissionMode = options.permissionMode ?? "bypassPermissions";
     this.settingSources = options.settingSources ?? ["project"];
-    this.systemPromptAppend = [
-      "Use the following Libretto skill documentation as in-session guidance.",
-      "<libretto_skill>",
-      options.librettoSkillMarkdown,
-      "</libretto_skill>",
-    ].join("\n");
+    this.allowedTools = options.allowedTools ?? [];
+    this.systemPromptAppend = options.systemPromptAppend?.trim() || null;
+
     this.sessionId = randomUUID();
   }
 
@@ -506,10 +504,6 @@ export class ClaudeEvalHarness {
     prompt: string,
     sendOptions: ClaudeEvalHarnessSendOptions = {},
   ): Promise<EvalResponse> {
-    if (this.isClosed) {
-      throw new Error("Cannot send prompts after harness is closed.");
-    }
-
     const options: Options = {
       cwd: this.cwd,
       model: this.model,
@@ -517,12 +511,16 @@ export class ClaudeEvalHarness {
       tools: { type: "preset", preset: "claude_code" },
       settingSources: this.settingSources,
       permissionMode: this.permissionMode,
-      systemPrompt: {
+      allowedTools: this.allowedTools,
+    };
+
+    if (this.systemPromptAppend) {
+      options.systemPrompt = {
         type: "preset",
         preset: "claude_code",
         append: this.systemPromptAppend,
-      },
-    };
+      };
+    }
 
     if (this.permissionMode === "bypassPermissions") {
       options.allowDangerouslySkipPermissions = true;
@@ -571,9 +569,5 @@ export class ClaudeEvalHarness {
       model: this.model,
     });
     return response;
-  }
-
-  async close(): Promise<void> {
-    this.isClosed = true;
   }
 }
