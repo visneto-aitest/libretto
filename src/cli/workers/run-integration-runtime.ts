@@ -202,20 +202,13 @@ async function loadWorkflowExport(
 
 export async function installHeadedWorkflowVisualization(args: {
   context: BrowserContext;
-  headless: boolean;
-  visualize?: boolean;
   logger: LoggerApi;
   instrument?: typeof instrumentContext;
-}): Promise<boolean> {
-  if (args.headless || args.visualize === false) {
-    return false;
-  }
-
+}): Promise<void> {
   await (args.instrument ?? instrumentContext)(args.context, {
     visualize: true,
     logger: args.logger,
   });
-  return true;
 }
 
 async function runIntegrationInternal(
@@ -263,12 +256,12 @@ async function runIntegrationInternal(
     headless: args.headless,
     storageStatePath,
   });
-  await installHeadedWorkflowVisualization({
-    context: browserSession.context,
-    headless: args.headless,
-    visualize: args.visualize,
-    logger: integrationLogger,
-  });
+  if (!args.headless && args.visualize !== false) {
+    await installHeadedWorkflowVisualization({
+      context: browserSession.context,
+      logger: integrationLogger,
+    });
+  }
   const actionsLogPath = getSessionActionsLogPath(args.session);
   const networkLogPath = getSessionNetworkLogPath(args.session);
   await installSessionTelemetry({
