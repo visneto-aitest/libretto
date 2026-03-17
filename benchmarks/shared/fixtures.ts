@@ -50,5 +50,6 @@ export async function createClaudeBenchmarkHarness(
     maxTurns: 30,
     settingSources: ["project"],
     allowedTools: [BENCHMARK_SKILL_TOOL_NAME],
+    stopOnFinalResult: true,
   });
 }

@@ -54,6 +54,14 @@ function clip(text: string, maxChars: number): string {
   ].join("\n");
 }
 
+function extractFinalResultLine(transcript: string): string | null {
+  const finalResultLine = transcript
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.startsWith("FINAL_RESULT:"));
+  return finalResultLine ?? null;
+}
+
 function asJson(value: unknown): string {
   try {
     return JSON.stringify(value);
@@ -414,6 +422,7 @@ export type ClaudeEvalHarnessOptions = {
   permissionMode?: PermissionMode;
   settingSources?: SettingSource[];
   allowedTools?: string[];
+  stopOnFinalResult?: boolean;
 };
 
 export type ClaudeEvalHarnessSendOptions = {
@@ -485,6 +494,7 @@ export class ClaudeEvalHarness {
   private readonly settingSources: SettingSource[];
   private readonly systemPromptAppend: string | null;
   private readonly allowedTools: string[];
+  private readonly stopOnFinalResult: boolean;
   private sessionId: string;
   private hasStarted = false;
 
@@ -496,6 +506,7 @@ export class ClaudeEvalHarness {
     this.settingSources = options.settingSources ?? ["project"];
     this.allowedTools = options.allowedTools ?? [];
     this.systemPromptAppend = options.systemPromptAppend?.trim() || null;
+    this.stopOnFinalResult = options.stopOnFinalResult === true;
 
     this.sessionId = randomUUID();
   }
@@ -552,6 +563,15 @@ export class ClaudeEvalHarness {
             model: this.model,
           }),
         );
+      }
+
+      if (
+        this.stopOnFinalResult &&
+        message.type === "result" &&
+        message.subtype === "success" &&
+        extractFinalResultLine(message.result) !== null
+      ) {
+        break;
       }
     }
 
