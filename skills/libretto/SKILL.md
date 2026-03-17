@@ -86,7 +86,7 @@ npx libretto run ./integration.ts main --auth-profile app.example.com --headed
 
 #### Interactive building
 
-```bash
+```text
 <example>
 [Context: The user wants to build a new browser workflow and does not yet know the page structure]
 Assistant: Let me open the target page in headed mode so we can inspect the real workflow.
@@ -100,7 +100,7 @@ Assistant: The interaction works. I'll now update the workflow file outside Libr
 
 #### Network requests
 
-```bash
+```text
 <example>
 [Context: The user wants to build an integration using network requests]
 Assistant: [Reads `references/reverse-engineering-network-requests.md`]
@@ -115,7 +115,7 @@ Assistant: I found the relevant requests. I'll recreate the workflow from those 
 
 ### Debugging existing workflows
 
-```bash
+```text
 <example>
 [Context: The user has an existing Libretto workflow that is failing]
 Assistant: I'll reproduce the failure first so we can inspect the exact browser state it leaves behind.
