@@ -71,8 +71,9 @@ npx libretto snapshot \
 ### `run`
 
 - Use `run` to execute an existing Libretto workflow.
-- If the workflow fails, inspect the live session with `snapshot` and `exec`.
-- If it pauses, resume it with `npx libretto resume --session <name>`.
+- If the workflow fails, Libretto keeps the browser open. Inspect the failed state with `snapshot` and `exec` before editing code.
+- If the workflow pauses, resume it with `npx libretto resume --session <name>`.
+- Re-run the same workflow after each fix to verify the browser behavior end to end.
 
 ```bash
 npx libretto run ./integration.ts main
@@ -132,3 +133,4 @@ Assistant: I found the issue. I'll patch the workflow code, then rerun `npx libr
 - For reverse-engineering captured requests, read `references/reverse-engineering-network-requests.md`.
 - For incorporating manual browser steps the user performed, read `references/user-action-log.md`.
 - For saving and reusing login state, read `references/auth-profiles.md`.
+- For multiple open pages and page targeting, read `references/pages-and-page-targeting.md`.
