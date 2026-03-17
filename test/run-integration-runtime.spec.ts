@@ -30,50 +30,15 @@ describe("installHeadedWorkflowVisualization", () => {
     const context = {} as never;
     const instrument = vi.fn(async () => {});
 
-    const enabled = await installHeadedWorkflowVisualization({
+    await installHeadedWorkflowVisualization({
       context,
-      headless: false,
-      visualize: true,
       logger,
       instrument,
     });
 
-    expect(enabled).toBe(true);
     expect(instrument).toHaveBeenCalledWith(context, {
       visualize: true,
       logger,
     });
-  });
-
-  it("skips visualization for headless runs", async () => {
-    const logger = createLogger();
-    const instrument = vi.fn(async () => {});
-
-    const enabled = await installHeadedWorkflowVisualization({
-      context: {} as never,
-      headless: true,
-      visualize: true,
-      logger,
-      instrument,
-    });
-
-    expect(enabled).toBe(false);
-    expect(instrument).not.toHaveBeenCalled();
-  });
-
-  it("skips visualization when disabled explicitly", async () => {
-    const logger = createLogger();
-    const instrument = vi.fn(async () => {});
-
-    const enabled = await installHeadedWorkflowVisualization({
-      context: {} as never,
-      headless: false,
-      visualize: false,
-      logger,
-      instrument,
-    });
-
-    expect(enabled).toBe(false);
-    expect(instrument).not.toHaveBeenCalled();
   });
 });
