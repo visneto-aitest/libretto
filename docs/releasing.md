@@ -57,6 +57,8 @@ The script in `scripts/prepare-release.sh` does the following:
 6. Commits the version bump.
 7. Pushes the branch and opens a PR to `main`.
 
+Release PRs also run the eval workflow. That workflow compares the current eval score against the latest successful `main` baseline and fails if the score drifts by more than 5 percentage points in either direction.
+
 ## Merge behavior
 
 After the release PR merges, `.github/workflows/release.yml` runs on `main`.
@@ -71,6 +73,16 @@ The workflow:
 6. Creates GitHub release `vX.Y.Z` with generated release notes if it does not already exist.
 
 This makes the workflow safe to re-run after partial failures. For example, if npm publish succeeds but GitHub release creation fails, a re-run will skip npm and only create the missing release.
+
+## Eval gating on release PRs
+
+`.github/workflows/evals.yml` now runs automatically for release PRs and for qualifying pushes to `main`.
+
+- On `main`, it records the current eval summary as the baseline artifact for future release PRs.
+- On release PRs, it runs evals again and compares the overall score against the latest successful `main` baseline.
+- If the score moves outside a `+/-5%` window, the eval job fails and flags the release PR.
+
+If no successful baseline artifact exists yet, the release PR eval job reports that and skips the comparison for that run.
 
 ## Changelog behavior
 
