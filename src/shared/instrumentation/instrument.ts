@@ -230,8 +230,8 @@ function instrumentFrameLocator(
 		const orig = (frameLocator as any)[method].bind(frameLocator);
 		(frameLocator as any)[method] = (...args: any[]) => {
 			const result = orig(...args);
-			if (method === "owner") {
-				return instrumentLocator(result, page, opts);
+			if (method === "first" || method === "last" || method === "nth") {
+				return instrumentFrameLocator(result, page, opts);
 			}
 			return instrumentLocator(result, page, opts);
 		};

@@ -115,4 +115,31 @@ describe("installInstrumentation", () => {
 
     expect(originalClick).toHaveBeenCalledTimes(1);
   });
+
+  it("instruments locators returned through frameLocator.first/last/nth chains", async () => {
+    const outerFrameLocator = createFakeFrameLocator();
+    const innerFrameLocator = createFakeFrameLocator();
+    const submitButton = createFakeLocator();
+    const originalClick = submitButton.click;
+    innerFrameLocator.getByRole.mockReturnValue(submitButton);
+    outerFrameLocator.first.mockReturnValue(innerFrameLocator);
+
+    const page = createFakePage({
+      locatorResult: createFakeLocator(),
+      frameLocatorResult: outerFrameLocator,
+    });
+
+    await installInstrumentation(page as never, { visualize: false });
+
+    const button = page
+      .frameLocator('iframe[name="newBody"]')
+      .first()
+      .getByRole("button", { name: "Submit" });
+
+    expect(button.click).not.toBe(originalClick);
+
+    await button.click();
+
+    expect(originalClick).toHaveBeenCalledTimes(1);
+  });
 });
