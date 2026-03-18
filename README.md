@@ -76,7 +76,10 @@ For local development in this repository:
 
 ```bash
 pnpm i
+pnpm check:skills
 pnpm build
 pnpm type-check
 pnpm test
 ```
+
+If the mirrored Libretto skill copies drift, run `pnpm sync:skills`. In this repository, `pnpm i` also resyncs them during `postinstall`.
