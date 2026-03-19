@@ -24,6 +24,7 @@ metadata:
 - Announce which session you are using and what page you are on.
 - Ask instead of guessing when it is unclear what to click, type, or submit.
 - Read and follow guidelines in `code-generation-rules.md` before generating or editing production workflow code.
+- After interactive exploration and code generation, test key logic with `exec`, then verify the workflow file with `run --headless`.
 - Get explicit user confirmation before mutating actions or replaying network requests that may have side effects.
 - Never run multiple `exec` commands at the same time.
 - Keep the browser session open until the user says the session is done.
