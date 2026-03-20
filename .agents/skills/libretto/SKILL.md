@@ -10,12 +10,12 @@ metadata:
 ## How Libretto Works
 
 - Libretto is a CLI for exploring live websites and building or debugging reusable browser automation scripts.
-- Use Libretto to inspect the real site first: open pages, observe state, inspect requests, and prototype interactions before writing code.
+- Use Libretto commands to inspect the site and open pages, observe state, inspect requests, and prototype interactions.
 - Libretto work must end in script changes. Create or edit the workflow file instead of stopping at interactive exploration.
 
 ## Default Integration Approach
 
-- Prefer network requests first for new integrations.
+- Prefer network requests first for new integrations unless the user explicitly asks for Playwright or UI automation, then do not use the site's internal API.
 - Read `references/site-security-review.md` before committing to a network-first approach on a new site.
 - Fall back to passive interception or Playwright-driven UI automation when the security review rules network requests out, the request path is not workable, or the user explicitly asks for Playwright.
 
@@ -29,11 +29,12 @@ metadata:
 
 - Announce which session you are using and what page you are on.
 - Ask instead of guessing when it is unclear what to click, type, or submit.
+- Defer repo/code review until you begin generating code, unless the user explicitly asks for it earlier.
 - Read and follow guidelines in `references/code-generation-rules.md` before generating or editing production workflow code.
-- After interactive exploration and code generation, test key logic with `exec`, then verify the workflow file with `run --headless`.
+- Validation requires a successful clean `run --headless` with confirmation of the actual returned output, not just process success. If the user wants to watch the finished workflow, do a final headed `run` after headless validation succeeds.
+- Treat exploration sessions as disposable unless the user explicitly wants one kept open.
 - Get explicit user confirmation before mutating actions or replaying network requests that may have side effects.
 - Never run multiple `exec` commands at the same time.
-- Keep the browser session open until the user says the session is done.
 
 ## Commands
 
@@ -105,6 +106,7 @@ npx libretto network --session debug-example --page <page-id>
 
 - Use `actions` when you need a quick record of recent user or agent interactions in the current session.
 - Keep it lightweight. It is a helper for orientation, not the main integration-building workflow.
+- Read `references/action-logs.md` when you need to understand what `actions.jsonl` contains, how Libretto chooses selectors for user events, or why a logged action resolved to a generic target.
 
 ```bash
 npx libretto actions --session debug-example --last 20
@@ -113,15 +115,16 @@ npx libretto actions --session debug-example --action click --source user
 
 ### `run`
 
-- Use `run` to verify a workflow file after creating it or editing it.
+- Use `run` to verify a workflow file after creating it or editing it, preferring `run --headless` for the normal fix/verify loop.
+- Plain `run` defaults to headed mode.
 - If the workflow fails, Libretto keeps the browser open. Inspect the failed state with `snapshot` and `exec` before editing code.
+- Insert `await pause(session)` statements in the workflow file when you need to stop at specific states for interactive debugging, like breakpoints in the browser flow.
 - If the workflow pauses, resume it with `npx libretto resume --session <name>`.
 - Re-run the same workflow after each fix to verify the browser behavior end to end.
 
 ```bash
-npx libretto run ./integration.ts main
-npx libretto run ./integration.ts main --params '{"status":"open"}'
-npx libretto run ./integration.ts main --auth-profile app.example.com --headed
+npx libretto run ./integration.ts main --headless --params '{"status":"open"}'
+npx libretto run ./integration.ts main --auth-profile app.example.com
 ```
 
 ### `resume`
@@ -136,7 +139,7 @@ npx libretto resume --session debug-example
 
 ### `save`
 
-- Use `save` when the user logs in manually and wants to reuse that authenticated browser state later.
+- Use `save` only when the user explicitly asks to save or reuse authenticated browser state.
 
 ```bash
 npx libretto save app.example.com
@@ -144,7 +147,7 @@ npx libretto save app.example.com
 
 ### `close`
 
-- Use `close` only when the user is done with the session.
+- Use `close` when the user is done with the session or an exploration session is no longer helping progress (unless the user asked to keep watching that browser).
 - `close --all` is available for workspace cleanup.
 
 ```bash
@@ -152,44 +155,11 @@ npx libretto close --session debug-example
 npx libretto close --all
 ```
 
-## Examples
-
-### Building new browser automation workflows
-
-#### Interactive building
-
-```text
-<example>
-[Context: The user wants to build a new browser workflow and does not yet know the page structure]
-Assistant: I'll inspect the real site first if needed, but before I finish I'll create `target-workflow.ts` so the task produces reusable automation code.
-Assistant: [Runs `npx libretto open https://target.example.com --headed`]
-Assistant: [Reads `references/site-security-review.md` before choosing between passive network inspection, direct browser fetch calls, and Playwright-first automation]
-Assistant: [Runs `npx libretto snapshot --objective "Find the next required action" --context "We are starting the workflow from the landing page and need the first meaningful step."`]
-Assistant: [Uses `network`, `snapshot`, and `exec` as needed to understand the site and decide the implementation path]
-Assistant: [Reads `references/code-generation-rules.md` before writing production workflow code]
-Assistant: I found the working path. I'll now update the workflow file outside Libretto and verify it with `npx libretto run ...`.
-</example>
-```
-
-### Debugging existing workflows
-
-```text
-<example>
-[Context: The user has an existing Libretto workflow that is failing]
-Assistant: I'll reproduce the failure first so we can inspect the exact browser state it leaves behind.
-Assistant: [Runs `npx libretto run ./integration.ts main --session debug-flow --headed`]
-Assistant: The workflow failed and Libretto kept the browser open. I'll inspect the page state before changing code.
-Assistant: [Runs `npx libretto snapshot --session debug-flow --objective "Find the blocking error or broken selector target" --context "The workflow just failed after trying to continue from the review step, and I need to identify the visible blocker on the current page."`]
-Assistant: [Runs `npx libretto exec --session debug-flow "...focused inspection or prototype..."`]
-Assistant: [Reads `references/code-generation-rules.md` before patching the workflow file]
-Assistant: I found the issue. I'll patch the workflow code, then rerun `npx libretto run ...` to verify the fix.
-</example>
-```
-
 ## References
 
 - Read `references/configuration-file-reference.md` when you need to inspect or change `.libretto/config.json` for snapshot model selection or viewport defaults.
 - Read `references/site-security-review.md` before reviewing the site's security posture and deciding whether to lead with network requests, passive interception, or Playwright DOM automation on a new site.
 - Read `references/code-generation-rules.md` before writing or editing production workflow files.
-- Read `references/auth-profiles.md` when the site requires login and the simplest path is to save local browser state.
+- Read `references/auth-profiles.md` when auth-profile behavior is relevant.
 - Read `references/pages-and-page-targeting.md` when a session has multiple open pages or you need `--page`.
+- Read `references/action-logs.md` when action log structure, selector choice, or user-vs-agent event interpretation matters.

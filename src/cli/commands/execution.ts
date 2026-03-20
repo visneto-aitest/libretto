@@ -22,7 +22,7 @@ import {
 import {
   readActionLog,
   readNetworkLog,
-  wrapPageForActionLogging,
+  installExecAttachedPageActionLogging,
 } from "../core/telemetry.js";
 import type {
   RunIntegrationWorkerRequest,
@@ -173,7 +173,12 @@ async function runExec(
   };
   process.on("SIGINT", sigintHandler);
 
-  wrapPageForActionLogging(page, session, resolvedPageId, onActivity);
+  installExecAttachedPageActionLogging(
+    page,
+    session,
+    resolvedPageId,
+    onActivity,
+  );
 
   if (visualize) {
     await installInstrumentation(page, { visualize: true, logger });

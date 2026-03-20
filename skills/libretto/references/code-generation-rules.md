@@ -43,7 +43,6 @@ Key points:
 - `metadata` is currently an object and is typically `{}` in generated files.
 - `ctx` provides `session`, `page`, `logger`, and `services` (generic, default `{}`)
 - `input` comes from `--params '{"query":"foo"}'` or `--params-file params.json` on the CLI
-- If the site requires a saved login session, pass `--auth-profile <domain>` to the CLI (created via `npx libretto save <domain>`)
 - Use `await pause(ctx.session)` (or `await pause(session)`) to pause the workflow for debugging. It is a no-op in production.
 - The browser is launched and closed automatically by the CLI. Do not launch or close it in the handler.
 

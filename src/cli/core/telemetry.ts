@@ -86,6 +86,15 @@ export type ActionLogEntry = {
   action: string;
   source: "user" | "agent";
   selector?: string;
+  bestSemanticSelector?: string;
+  targetSelector?: string;
+  ancestorSelectors?: string[];
+  nearbyText?: string;
+  composedPath?: string[];
+  coordinates?: {
+    x: number;
+    y: number;
+  };
   value?: string;
   url?: string;
   duration?: number;
@@ -139,6 +148,11 @@ export function readActionLog(
       (e) =>
         re.test(e.action) ||
         re.test(e.selector || "") ||
+        re.test(e.bestSemanticSelector || "") ||
+        re.test(e.targetSelector || "") ||
+        re.test((e.ancestorSelectors || []).join(" ")) ||
+        re.test(e.nearbyText || "") ||
+        re.test((e.composedPath || []).join(" ")) ||
         re.test(e.value || "") ||
         re.test(e.url || ""),
     );
@@ -158,8 +172,16 @@ export function readActionLog(
 export function formatActionEntry(e: ActionLogEntry): string {
   const time = e.ts.replace(/.*T/, "").replace(/\.\d+Z$/, "");
   const src = e.source.toUpperCase().padEnd(5);
+  const displaySelector = e.bestSemanticSelector || e.selector;
   const parts = [`[${time}]`, `[${src}]`, e.action];
-  if (e.selector) parts.push(e.selector);
+  if (displaySelector) parts.push(displaySelector);
+  if (e.targetSelector && e.targetSelector !== displaySelector) {
+    parts.push(`target=${e.targetSelector}`);
+  }
+  if (e.nearbyText) parts.push(`text="${e.nearbyText}"`);
+  if (e.coordinates) {
+    parts.push(`@(${e.coordinates.x},${e.coordinates.y})`);
+  }
   if (e.value) parts.push(`"${e.value}"`);
   if (e.url) parts.push(e.url);
   if (e.duration != null) parts.push(`${e.duration}ms`);
@@ -327,7 +349,8 @@ function wrapLocator(
   return locator;
 }
 
-export function wrapPageForActionLogging(
+// Wraps the page object used by a single attached `exec` invocation so its Playwright calls are logged.
+export function installExecAttachedPageActionLogging(
   page: Page,
   session: string,
   pageId?: string,
