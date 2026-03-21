@@ -2,7 +2,7 @@
 
 - Stored at `.libretto/sessions/<session>/actions.jsonl`.
 - One JSON object per line.
-- `npx libretto actions` prints a formatted view of the same data.
+- Query the file directly with `jq`, for example `tail -n 20 .libretto/sessions/<session>/actions.jsonl | jq .`.
 - This is an orientation log, not a replay trace.
 
 ## User vs Agent

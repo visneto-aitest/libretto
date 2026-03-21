@@ -10,7 +10,7 @@ metadata:
 ## How Libretto Works
 
 - Libretto is a CLI for exploring live websites and building or debugging reusable browser automation scripts.
-- Use Libretto commands to inspect the site and open pages, observe state, inspect requests, and prototype interactions.
+- Use Libretto commands to inspect the site and open pages, observe state, query session logs with `jq`, and prototype interactions.
 - Libretto work must end in script changes. Create or edit the workflow file instead of stopping at interactive exploration.
 
 ## Default Integration Approach
@@ -21,8 +21,7 @@ metadata:
 
 ## Setup
 
-- Ask the user to set up snapshot analysis before relying on `snapshot` for page understanding.
-- Use `npx libretto init` for first-time workspace setup.
+- Use `npx libretto init` for first-time workspace setup (sets up config file and snapshot command).
 - If credentials are already available, `npx libretto ai configure openai|anthropic|gemini|vertex` is usually enough.
 
 ## Working Rules
@@ -83,34 +82,11 @@ npx libretto exec --visualize "await page.locator('button:has-text(\"Continue\")
 ### `pages`
 
 - Use `pages` when a popup, new tab, or second page appears.
-- If `exec`, `snapshot`, `network`, or `actions` complains about multiple pages, list page ids first and then pass `--page`.
+- If `exec` or `snapshot` complains about multiple pages, list page ids first and then pass `--page`.
 
 ```bash
 npx libretto pages --session debug-example
 npx libretto exec --session debug-example --page <page-id> "return await page.url()"
-```
-
-### `network`
-
-- Use `network` to inspect the requests the page already made.
-- Prefer this when discovering how a site loads data or when validating whether a network-first approach is workable.
-- Filter aggressively by method, URL pattern, and page when the log is noisy.
-
-```bash
-npx libretto network --session debug-example --last 20
-npx libretto network --session debug-example --method POST --filter 'referral|patient'
-npx libretto network --session debug-example --page <page-id>
-```
-
-### `actions`
-
-- Use `actions` when you need a quick record of recent user or agent interactions in the current session.
-- Keep it lightweight. It is a helper for orientation, not the main integration-building workflow.
-- Read `references/action-logs.md` when you need to understand what `actions.jsonl` contains, how Libretto chooses selectors for user events, or why a logged action resolved to a generic target.
-
-```bash
-npx libretto actions --session debug-example --last 20
-npx libretto actions --session debug-example --action click --source user
 ```
 
 ### `run`
@@ -155,6 +131,29 @@ npx libretto close --session debug-example
 npx libretto close --all
 ```
 
+## Logs
+
+Session logs are JSONL files at `.libretto/sessions/<session>/`. Use `jq` to query them directly — for any filtering, slicing, or inspection task.
+There are no dedicated `network` or `actions` CLI commands.
+
+```bash
+# Last 20 action entries
+tail -n 20 .libretto/sessions/<session>/actions.jsonl | jq .
+
+# POST requests only
+jq 'select(.method == "POST")' .libretto/sessions/<session>/network.jsonl
+```
+
+### Action log (`actions.jsonl`)
+
+Key fields: `ts` (ISO timestamp), `source` (`user` or `agent`), `action` (`click`, `fill`, `goto`, etc.), `selector` (locator used by the agent), `bestSemanticSelector` (canonical selector for user DOM events), `success` (boolean), `url` (navigation target), `value` (typed or submitted value), `error` (message on failure).
+
+Read `references/action-logs.md` for full field descriptions and user-vs-agent entry semantics.
+
+### Network log (`network.jsonl`)
+
+Key fields: `ts` (ISO timestamp), `method` (HTTP method, e.g. `GET`, `POST`), `url` (request URL), `status` (HTTP status code), `contentType` (response content type), `responseBody` (response body string, may be null).
+
 ## References
 
 - Read `references/configuration-file-reference.md` when you need to inspect or change `.libretto/config.json` for snapshot model selection or viewport defaults.
@@ -162,4 +161,4 @@ npx libretto close --all
 - Read `references/code-generation-rules.md` before writing or editing production workflow files.
 - Read `references/auth-profiles.md` when auth-profile behavior is relevant.
 - Read `references/pages-and-page-targeting.md` when a session has multiple open pages or you need `--page`.
-- Read `references/action-logs.md` when action log structure, selector choice, or user-vs-agent event interpretation matters.
+- Read `references/action-logs.md` for full action log field descriptions and user-vs-agent event semantics.

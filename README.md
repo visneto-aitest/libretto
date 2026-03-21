@@ -66,6 +66,13 @@ Libretto stores local runtime state in a `.libretto/` directory at your project 
   - `snapshots/` — Screenshot PNGs and HTML snapshots captured via `npx libretto snapshot`
 - **`ai.json`** — AI runtime configuration set via `npx libretto ai configure`.
 
+Query `network.jsonl` and `actions.jsonl` directly with `jq` when you need to inspect session logs:
+
+```bash
+jq 'select(.method == "POST")' .libretto/sessions/<session>/network.jsonl
+tail -n 20 .libretto/sessions/<session>/actions.jsonl | jq .
+```
+
 ## Authors
 
 Maintained by the team at [Saffron Health](https://saffron.health).

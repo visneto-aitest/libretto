@@ -356,13 +356,13 @@ describe("SimpleCLI framework", () => {
     });
 
     const app = SimpleCLI.define("libretto", {
-      network: SimpleCLI.command({ description: "network" })
+      inspect: SimpleCLI.command({ description: "inspect" })
         .input(input)
         .handle(async ({ input }) => input),
     });
 
     await expect(
-      app.run(["network", "--filter", "--clear"]),
+      app.run(["inspect", "--filter", "--clear"]),
     ).rejects.toThrow("Missing value for --filter.");
   });
 

@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect } from "vitest";
 import { test } from "./fixtures";
 
@@ -245,9 +245,9 @@ describe("state-driven CLI subprocess behavior", () => {
     );
   }, 45_000);
 
-  test("reads and clears network logs for a live session", async ({
+  test("writes network logs for a live session", async ({
     librettoCli,
-    evaluate,
+    workspacePath,
   }) => {
     const session = "network-live-session";
     await librettoCli(`open https://example.com --headless --session ${session}`);
@@ -256,18 +256,32 @@ describe("state-driven CLI subprocess behavior", () => {
       `exec "await page.goto('https://example.com/?network=one'); return await page.url();" --session ${session}`,
     );
 
-    const view = await librettoCli(`network --session ${session} --last 5`);
-    await evaluate(view.stdout).toMatch(
-      "Shows at least one network request result for the session.",
+    const logPath = workspacePath(
+      ".libretto",
+      "sessions",
+      session,
+      "network.jsonl",
     );
+    expect(existsSync(logPath)).toBe(true);
 
-    const clear = await librettoCli(`network --session ${session} --clear`);
-    expect(clear.stdout).toContain("Network log cleared.");
+    const entries = readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as { url?: string; method?: string });
+
+    expect(
+      entries.some(
+        (entry) =>
+          entry.method === "GET" &&
+          entry.url?.includes("https://example.com/?network=one"),
+      ),
+    ).toBe(true);
   }, 60_000);
 
-  test("reads and clears action logs for a live session", async ({
+  test("writes action logs for a live session", async ({
     librettoCli,
-    evaluate,
+    workspacePath,
   }) => {
     const session = "actions-live-session";
     await librettoCli(`open https://example.com --headless --session ${session}`);
@@ -276,17 +290,36 @@ describe("state-driven CLI subprocess behavior", () => {
       `exec "await page.reload(); return await page.url();" --session ${session}`,
     );
 
-    const view = await librettoCli(`actions --session ${session} --last 5`);
-    await evaluate(view.stdout).toMatch(
-      "Shows at least one action result for the session.",
+    const logPath = workspacePath(
+      ".libretto",
+      "sessions",
+      session,
+      "actions.jsonl",
     );
+    expect(existsSync(logPath)).toBe(true);
 
-    const clear = await librettoCli(`actions --session ${session} --clear`);
-    expect(clear.stdout).toContain("Action log cleared.");
+    const entries = readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as { action?: string; source?: string; url?: string },
+      );
+
+    expect(
+      entries.some(
+        (entry) =>
+          entry.source === "agent" &&
+          /^(reload|goto)$/.test(entry.action ?? "") &&
+          entry.url?.includes("example.com"),
+      ),
+    ).toBe(true);
   }, 60_000);
 
   test("logs richer user action selectors for nested click targets", async ({
     librettoCli,
+    workspacePath,
   }) => {
     const session = "actions-rich-user-log";
     const html = encodeURIComponent(
@@ -301,13 +334,37 @@ describe("state-driven CLI subprocess behavior", () => {
       `exec "await page.evaluate(() => { const target = document.querySelector('#saveBtn span'); if (!(target instanceof HTMLElement)) throw new Error('Missing nested span target'); target.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 42, clientY: 24 })); });" --session ${session}`,
     );
 
-    const view = await librettoCli(
-      `actions --session ${session} --action dblclick --source user --last 5`,
+    const logPath = workspacePath(
+      ".libretto",
+      "sessions",
+      session,
+      "actions.jsonl",
     );
-    expect(view.stdout).toContain("dblclick");
-    expect(view.stdout).toContain("button#saveBtn");
-    expect(view.stdout).toContain("target=span");
-    expect(view.stdout).toContain("text=\"Save\"");
-    expect(view.stdout).toContain("@(42,24)");
+    const entries = readFileSync(logPath, "utf8")
+      .trim()
+      .split("\n")
+      .filter(Boolean)
+      .map(
+        (line) =>
+          JSON.parse(line) as {
+            action?: string;
+            source?: string;
+            bestSemanticSelector?: string;
+            targetSelector?: string;
+            nearbyText?: string;
+            coordinates?: { x?: number; y?: number };
+          },
+      );
+
+    const entry = entries.find(
+      (candidate) =>
+        candidate.source === "user" && candidate.action === "dblclick",
+    );
+
+    expect(entry).toBeDefined();
+    expect(entry?.bestSemanticSelector).toContain("button#saveBtn");
+    expect(entry?.targetSelector).toBe("span");
+    expect(entry?.nearbyText).toContain("Save");
+    expect(entry?.coordinates).toEqual({ x: 42, y: 24 });
   }, 60_000);
 });

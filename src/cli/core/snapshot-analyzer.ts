@@ -644,7 +644,8 @@ function buildInterpretInstructions(): string {
   prompt += `1. Answer the objective concisely\n`;
   prompt += `2. Identify ALL interactive elements relevant to the objective and provide Playwright-ready CSS selectors\n`;
   prompt += `3. Note any relevant page state (loading indicators, error messages, disabled elements, modals/overlays)\n`;
-  prompt += `4. If elements are inside iframes, identify the iframe selector and the element selector within it\n\n`;
+  prompt += `4. Identify the topmost interactable surface and any blockers intercepting interaction, such as modals, overlays, backdrops, loaders, or iframes, and explain how to circumvent them\n`;
+  prompt += `5. If elements are inside iframes, identify the iframe selector and the element selector within it\n\n`;
   prompt += `Output JSON with this shape:\n`;
   prompt += `{"answer": string, "selectors": [{"label": string, "selector": string, "rationale": string}], "notes": string}\n\n`;
   prompt += `Selectors should prefer robust attributes: data-testid, data-test, aria-label, name, id, role. Avoid fragile class-based or positional selectors.\n`;

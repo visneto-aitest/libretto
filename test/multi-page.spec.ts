@@ -121,18 +121,5 @@ describe("multi-page CLI behavior", () => {
       `Explains that page id "${missingPageId}" was not found in session "${session}".`,
     );
 
-    const actionsResult = await librettoCli(
-      `actions --session ${session} --page ${missingPageId}`,
-    );
-    await evaluate(actionsResult.stderr).toMatch(
-      `Explains that page id "${missingPageId}" was not found in session "${session}".`,
-    );
-
-    const networkResult = await librettoCli(
-      `network --session ${session} --page ${missingPageId}`,
-    );
-    await evaluate(networkResult.stderr).toMatch(
-      `Explains that page id "${missingPageId}" was not found in session "${session}".`,
-    );
   }, 45_000);
 });

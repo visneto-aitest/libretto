@@ -83,7 +83,7 @@ function buildTaskPrompt(options) {
     "- Do not ask user questions.",
     "- Solve from current page state only.",
     "- For CLI commands in this repo, use prefix: pnpm --filter libretto exec node dist/index.js",
-    "- Useful commands: snapshot, exec, actions, network.",
+    "- Useful commands: snapshot, exec, pages, and jq against .libretto/sessions/<session>/*.jsonl.",
     `- Max meaningful browser actions: ${options.maxSteps}`,
     modelLine,
     "",
