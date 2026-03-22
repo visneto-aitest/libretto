@@ -82,11 +82,13 @@ await myWorkflow.run(
 When running standalone via `npx libretto run`, services defaults to `{}`,
 so mark fields optional for anything unavailable in that context.
 
-## Playwright Locators for DOM Interaction
+## Playwright DOM Interaction Rules
 
 Generated code must use Playwright locator APIs for all DOM interactions. Do not use `page.evaluate()` with `document.querySelector`, `querySelectorAll`, `textContent`, `click()`, or other DOM APIs when a Playwright locator can do the same thing.
 
 During the interactive `exec` phase, `page.evaluate` is fine for quick prototyping. In generated production code, translate those patterns into Playwright locators.
+
+Before extracting data (for example text, rows, or field values), wait for the target content itself to be ready, not just its container.
 
 ### Anti-Patterns
 
