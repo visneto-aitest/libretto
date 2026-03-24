@@ -84,6 +84,8 @@ async function applyWindowPosition(
       bounds: requestedBounds,
     });
     await new Promise((resolve) => setTimeout(resolve, 250));
+  } catch {
+    // Best-effort: window positioning should not prevent browser launch.
   } finally {
     await pageCdp.detach().catch(() => {});
     await browserCdp?.detach().catch(() => {});
