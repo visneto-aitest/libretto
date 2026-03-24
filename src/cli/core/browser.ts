@@ -16,6 +16,7 @@ import {
   filterSemanticClasses,
   INTERACTIVE_ROLE_NAMES,
   INTERACTIVE_TAG_NAMES,
+  isObfuscatedClass,
   TEST_ATTRIBUTE_NAMES,
   TRUSTED_ATTRIBUTE_NAMES,
 } from "../../shared/dom-semantics.js";
@@ -467,6 +468,7 @@ mkdirSync(dirname(NETWORK_LOG), { recursive: true });
 	const INTERACTIVE_TAG_NAMES = ${JSON.stringify([...INTERACTIVE_TAG_NAMES])};
 	const INTERACTIVE_ROLE_NAMES = ${JSON.stringify([...INTERACTIVE_ROLE_NAMES])};
 	const filterSemanticClasses = ${filterSemanticClasses.toString()};
+	const isObfuscatedClass = ${isObfuscatedClass.toString()};
 
 	${installSessionTelemetry.toString()}
 

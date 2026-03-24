@@ -3,6 +3,7 @@ import {
   filterSemanticClasses,
   INTERACTIVE_ROLE_NAMES,
   INTERACTIVE_TAG_NAMES,
+  isObfuscatedClass,
   TEST_ATTRIBUTE_NAMES,
   TRUSTED_ATTRIBUTE_NAMES,
 } from "../../shared/dom-semantics.js";
@@ -220,6 +221,7 @@ export async function installSessionTelemetry(
   const SELECTOR_ATTRS = ${JSON.stringify(selectorAttributeNames)};
 
   ${filterSemanticClasses.toString()}
+  ${isObfuscatedClass.toString()}
 
   const normalizeWhitespace = (value) =>
     String(value || "").replace(/\\s+/g, " ").trim();
