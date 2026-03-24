@@ -6,12 +6,9 @@ on:
       - main
   pull_request:
 
-<<<<<<< HEAD
-=======
 permissions:
   contents: read
 
->>>>>>> origin/main
 jobs:
   test:
     runs-on: ubuntu-latest

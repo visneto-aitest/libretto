@@ -13,10 +13,12 @@ Libretto is a toolkit for building robust web integrations. It gives your coding
 
 We at [Saffron Health](https://saffron.health) built Libretto to help us maintain our browser integrations to common healthcare software. We're open-sourcing it so other teams have an easier time doing the same thing.
 
+https://github.com/user-attachments/assets/9b9a0ab3-5133-4b20-b3be-459943349d18
+
 ## Installation
 
 ```bash
-npm install --save-dev libretto
+npm install libretto
 
 # Install skill, download Chromium if not already installed, configure snapshot analysis
 npx libretto init

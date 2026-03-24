@@ -1,32 +1,15 @@
 import { spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 function resolveClaudeBinary() {
-  const localClaude = join(
-    process.env.HOME ?? "",
-    ".claude",
-    "local",
-    "claude",
-  );
+  const localClaude = join(process.env.HOME ?? "", ".claude", "local", "claude");
   return existsSync(localClaude) ? localClaude : "claude";
 }
 
 const FALLBACK_PREFIXES = {
-  codex: [
-    "codex",
-    "exec",
-    "--skip-git-repo-check",
-    "--sandbox",
-    "workspace-write",
-  ],
+  codex: ["codex", "exec", "--skip-git-repo-check", "--sandbox", "workspace-write"],
   claude: [resolveClaudeBinary(), "-p"],
 };
 
@@ -70,17 +53,13 @@ function validateBenchmarkResponse(payload) {
   const status = payload.task_status;
 
   if (typeof finalResult !== "string") {
-    throw new Error(
-      "Agent output JSON missing string field: final_result_response.",
-    );
+    throw new Error("Agent output JSON missing string field: final_result_response.");
   }
   if (typeof notes !== "string") {
     throw new Error("Agent output JSON missing string field: notes.");
   }
   if (status !== "completed" && status !== "failed") {
-    throw new Error(
-      "Agent output JSON has invalid task_status (must be completed|failed).",
-    );
+    throw new Error("Agent output JSON has invalid task_status (must be completed|failed).");
   }
 
   return {
@@ -91,9 +70,7 @@ function validateBenchmarkResponse(payload) {
 }
 
 function buildTaskPrompt(options) {
-  const modelLine = options.model
-    ? `Preferred model: ${options.model}`
-    : "Preferred model: default";
+  const modelLine = options.model ? `Preferred model: ${options.model}` : "Preferred model: default";
 
   return [
     "You are running an Online-Mind2Web browser benchmark task using Libretto.",
@@ -106,7 +83,7 @@ function buildTaskPrompt(options) {
     "- Do not ask user questions.",
     "- Solve from current page state only.",
     "- For CLI commands in this repo, use prefix: pnpm --filter libretto exec node dist/index.js",
-    "- Useful commands: snapshot, exec, pages, and jq against .libretto/sessions/<session>/*.jsonl.",
+    "- Useful commands: snapshot, exec, actions, network.",
     `- Max meaningful browser actions: ${options.maxSteps}`,
     modelLine,
     "",
@@ -272,20 +249,14 @@ class CodexHarnessAgentClient extends BaseHarnessAgentClient {
       ];
       this.lastArgs = args;
 
-      writeFileSync(
-        schemaPath,
-        JSON.stringify(FINAL_RESPONSE_SCHEMA, null, 2),
-        "utf8",
-      );
+      writeFileSync(schemaPath, JSON.stringify(FINAL_RESPONSE_SCHEMA, null, 2), "utf8");
 
       const result = await runProcess(this.command, args, {
         stdinText: prompt,
         timeoutMs: this.timeoutMs,
       });
 
-      const outputText = existsSync(outputPath)
-        ? readFileSync(outputPath, "utf8")
-        : "";
+      const outputText = existsSync(outputPath) ? readFileSync(outputPath, "utf8") : "";
       const parsedOutput = parseStrictJson(outputText);
       return {
         ...result,
