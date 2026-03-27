@@ -105,6 +105,7 @@ export {
   LibrettoWorkflow,
   LIBRETTO_WORKFLOW_BRAND,
   workflow,
+  _getRegistry,
   type LibrettoWorkflowContext,
   type LibrettoWorkflowHandler,
 } from "./shared/workflow/workflow.js";

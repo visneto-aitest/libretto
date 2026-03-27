@@ -28,6 +28,7 @@ import type { RunIntegrationWorkerRequest } from "./run-integration-worker-proto
 const LIBRETTO_WORKFLOW_BRAND = Symbol.for("libretto.workflow");
 
 type LoadedLibrettoWorkflow = {
+  name: string;
   run: (ctx: LibrettoWorkflowContext, input: unknown) => Promise<unknown>;
 };
 
@@ -149,9 +150,9 @@ function getAbsoluteIntegrationPath(integrationPath: string): string {
   return absolutePath;
 }
 
-async function loadWorkflowExport(
+async function loadWorkflowByName(
   absolutePath: string,
-  exportName: string,
+  workflowName: string,
 ): Promise<LoadedLibrettoWorkflow> {
   let loadedModule: Record<string, unknown>;
   try {
@@ -167,42 +168,27 @@ async function loadWorkflowExport(
     );
   }
 
-  const targetExport = loadedModule[exportName];
-  if (!targetExport) {
-    const availableExports = Object.keys(loadedModule);
-    const detail =
-      availableExports.length > 0
-        ? ` Available exports: ${availableExports.join(", ")}`
-        : " The module has no exports.";
-    throw new Error(
-      `Export "${exportName}" was not found in ${absolutePath}.${detail}`,
-    );
+  // Scan all exports for a LibrettoWorkflow with the matching name
+  for (const value of Object.values(loadedModule)) {
+    if (isLoadedLibrettoWorkflow(value) && (value as LoadedLibrettoWorkflow).name === workflowName) {
+      return value as LoadedLibrettoWorkflow;
+    }
   }
 
-  if (!isLoadedLibrettoWorkflow(targetExport)) {
-    throw new Error(
-      [
-        `Export "${exportName}" in ${absolutePath} is not a valid Libretto workflow.`,
-        "",
-        'A workflow must be created using the workflow() function from "libretto":',
-        "",
-        '  import { workflow } from "libretto";',
-        "",
-        `  export const ${exportName} = workflow<InputType, OutputType>(`,
-        "    async (ctx, input) => {",
-        "      // ctx.session  — libretto session name",
-        "      // ctx.page     — Playwright Page instance",
-        "      // ctx.logger   — MinimalLogger",
-        "      // ctx.services — injected dependencies (generic, default {})",
-        "      // input        — JSON-serializable input matching InputType",
-        "      return output; // must match OutputType",
-        "    },",
-        "  );",
-      ].join("\n"),
-    );
-  }
+  // Not found — collect available workflow names for a helpful error message
+  const availableWorkflows = Object.values(loadedModule)
+    .filter(isLoadedLibrettoWorkflow)
+    .map((w) => (w as LoadedLibrettoWorkflow).name)
+    .filter(Boolean);
 
-  return targetExport;
+  const detail =
+    availableWorkflows.length > 0
+      ? ` Available workflows: ${availableWorkflows.join(", ")}`
+      : " No workflows found in this file. Make sure to call workflow() from \"libretto\".";
+
+  throw new Error(
+    `Workflow "${workflowName}" not found in ${absolutePath}.${detail}`,
+  );
 }
 
 export async function installHeadedWorkflowVisualization(args: {
@@ -224,7 +210,7 @@ async function runIntegrationInternal(
 ): Promise<RunIntegrationOutcome> {
   const { logger } = options;
   const absolutePath = getAbsoluteIntegrationPath(args.integrationPath);
-  const workflow = await loadWorkflowExport(absolutePath, args.exportName);
+  const workflow = await loadWorkflowByName(absolutePath, args.workflowName);
   const signalPaths = getPauseSignalPaths(args.session);
   await removeSignalIfExists(signalPaths.pausedSignalPath);
   await removeSignalIfExists(signalPaths.resumeSignalPath);
@@ -233,12 +219,12 @@ async function runIntegrationInternal(
   const restoreStdout = mirrorStdoutToFile(signalPaths.outputSignalPath);
 
   console.log(
-    `Running integration "${args.exportName}" from ${absolutePath} (${args.headless ? "headless" : "headed"})...`,
+    `Running workflow "${args.workflowName}" from ${absolutePath} (${args.headless ? "headless" : "headed"})...`,
   );
 
   const integrationLogger = logger.withScope("integration-run", {
     integrationPath: absolutePath,
-    integrationExport: args.exportName,
+    workflowName: args.workflowName,
     session: args.session,
   });
 
@@ -287,6 +273,7 @@ async function runIntegrationInternal(
     logger: integrationLogger,
     page: browserSession.page,
     services: {},
+    credentials: args.credentials,
   };
 
   try {

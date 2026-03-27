@@ -36,6 +36,7 @@ import {
 type ExecFunction = (...args: unknown[]) => Promise<unknown>;
 type RunIntegrationCommandRequest = RunIntegrationWorkerRequest & {
   tsconfigPath?: string;
+  credentials?: Record<string, unknown>;
 };
 
 type StripTypeScriptTypesFn = (
@@ -605,9 +606,10 @@ async function runIntegrationFromFile(
   );
   const payload = JSON.stringify({
     integrationPath: args.integrationPath,
-    exportName: args.exportName,
+    workflowName: args.workflowName,
     session: args.session,
     params: args.params,
+    credentials: args.credentials,
     headless: args.headless,
     visualize: args.visualize,
     authProfileDomain: args.authProfileDomain,
@@ -706,15 +708,15 @@ export const execCommand = SimpleCLI.command({
     );
   });
 
-const runUsage = `Usage: libretto run <integrationFile> <integrationExport> [--params <json> | --params-file <path>] [--tsconfig <path>] [--headed|--headless] [--no-visualize] [--viewport WxH]`;
+const runUsage = `Usage: libretto run <integrationFile> <workflowName> [--params <json> | --params-file <path>] [--credentials <json>] [--tsconfig <path>] [--headed|--headless] [--no-visualize] [--viewport WxH]`;
 
 export const runInput = SimpleCLI.input({
   positionals: [
     SimpleCLI.positional("integrationFile", z.string().optional(), {
       help: "Path to the integration file",
     }),
-    SimpleCLI.positional("integrationExport", z.string().optional(), {
-      help: "Named workflow export to run",
+    SimpleCLI.positional("workflowName", z.string().optional(), {
+      help: "Name of the workflow to run (as registered via workflow())",
     }),
   ],
   named: {
@@ -725,6 +727,9 @@ export const runInput = SimpleCLI.input({
     paramsFile: SimpleCLI.option(z.string().optional(), {
       name: "params-file",
       help: "Path to a JSON params file",
+    }),
+    credentials: SimpleCLI.option(z.string().optional(), {
+      help: "Inline JSON credentials passed to ctx.credentials",
     }),
     tsconfig: SimpleCLI.option(z.string().optional(), {
       help: "Path to a tsconfig used for workflow module resolution",
@@ -745,7 +750,7 @@ export const runInput = SimpleCLI.input({
   },
 })
   .refine(
-    (input) => Boolean(input.integrationFile && input.integrationExport),
+    (input) => Boolean(input.integrationFile && input.workflowName),
     runUsage,
   )
   .refine(
@@ -788,6 +793,9 @@ export const runCommand = SimpleCLI.command({
     assertSessionAvailableForStart(ctx.session, ctx.logger);
 
     const params = resolveRunParams(input.params, input.paramsFile);
+    const credentials = input.credentials
+      ? parseJsonArg("--credentials", input.credentials)
+      : undefined;
     const headlessMode = input.headed
       ? false
       : input.headless
@@ -802,9 +810,10 @@ export const runCommand = SimpleCLI.command({
     await runIntegrationFromFile(
       {
         integrationPath: input.integrationFile!,
-        exportName: input.integrationExport!,
+        workflowName: input.workflowName!,
         session: ctx.session,
         params,
+        credentials: credentials as Record<string, unknown> | undefined,
         tsconfigPath: input.tsconfig,
         headless: headlessMode ?? false,
         visualize,

@@ -353,7 +353,7 @@ describe("basic CLI subprocess behavior", () => {
     );
   });
 
-  test("fails run when export is not a Libretto workflow instance", async ({
+  test("fails run when workflow name is not registered", async ({
     librettoCli,
     writeWorkflow,
   }) => {
@@ -367,8 +367,7 @@ export async function main() {
     );
 
     const result = await librettoCli("run ./integration.ts main");
-    expect(result.stderr).toContain('Export "main" in');
-    expect(result.stderr).toContain("is not a valid Libretto workflow.");
+    expect(result.stderr).toContain('Workflow "main" not found');
   });
 
   test("run forwards --tsconfig to tsx for workflow imports", async ({
@@ -404,7 +403,7 @@ export async function main() {
       `
 import message from "@/message";
 
-export const main = workflow(async () => {
+export const main = workflow("main", async () => {
   console.log(message);
 });
 `,
@@ -438,7 +437,7 @@ export const main = workflow(async () => {
     expect(result.stderr).not.toContain("use `exec` to inspect it");
   }, 45_000);
 
-  test("accepts branded Libretto workflow contract across module boundaries", async ({
+  test("accepts Libretto workflow registered with workflow() name", async ({
     librettoCli,
     workspaceDir,
     writeWorkflow,
@@ -446,14 +445,9 @@ export const main = workflow(async () => {
     await writeWorkflow(
       "integration.ts",
       `
-const brand = Symbol.for("libretto.workflow");
-
-export const main = {
-  [brand]: true,
-  async run() {
-    return "ok";
-  },
-};
+export const main = workflow("main", async () => {
+  return "ok";
+});
 `,
     );
 
@@ -463,7 +457,7 @@ export const main = {
         "missing-playwright-browsers",
       ),
     });
-    expect(result.stderr).not.toContain("is not a Libretto workflow");
+    expect(result.stderr).not.toContain("Workflow \"main\" not found");
   });
 
   test("fails run when local auth profile is declared but missing", async ({
@@ -473,7 +467,7 @@ export const main = {
     await writeWorkflow(
       "integration.ts",
       `
-export const main = workflow(async () => {
+export const main = workflow("main", async () => {
   return "ok";
 });
 `,
@@ -499,7 +493,7 @@ export const main = workflow(async () => {
     await writeWorkflow(
       "integration.ts",
       `
-export const main = workflow(async () => "ok");
+export const main = workflow("main", async () => "ok");
 `,
     );
 
@@ -520,7 +514,7 @@ export const main = workflow(async () => "ok");
     const integrationFilePath = await writeWorkflow(
       "integration-pause.mjs",
       `
-export const main = workflow(async (ctx) => {
+export const main = workflow("main", async (ctx) => {
   console.log("WORKFLOW_BEFORE_PAUSE");
   await pause(ctx.session);
   console.log("WORKFLOW_AFTER_PAUSE");
@@ -545,7 +539,7 @@ export const main = workflow(async (ctx) => {
     const integrationFilePath = await writeWorkflow(
       "integration-pause-missing-session.mjs",
       `
-export const main = workflow(async () => {
+export const main = workflow("main", async () => {
   await pause("");
 });
 `,
@@ -569,7 +563,7 @@ export const main = workflow(async () => {
     const integrationFilePath = await writeWorkflow(
       "integration-complete.mjs",
       `
-export const main = workflow(async () => {
+export const main = workflow("main", async () => {
   console.log("WORKFLOW_COMPLETES");
 });
 `,
@@ -591,7 +585,7 @@ export const main = workflow(async () => {
     const integrationFilePath = await writeWorkflow(
       "integration-selector-error-debug.mjs",
       `
-export const main = workflow(async (ctx) => {
+export const main = workflow("main", async (ctx) => {
   await ctx.page.goto("https://example.com");
   await ctx.page.locator("[").click();
 });
