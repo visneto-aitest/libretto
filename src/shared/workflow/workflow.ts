@@ -3,7 +3,6 @@ import type { MinimalLogger } from "../logger/logger.js";
 
 export const LIBRETTO_WORKFLOW_BRAND = Symbol.for("libretto.workflow");
 
-// Task 9.5: Add credentials to context
 export type LibrettoWorkflowContext<S = {}> = {
   session: string;
   page: Page;
@@ -18,13 +17,8 @@ export type LibrettoWorkflowHandler<
   S = {},
 > = (ctx: LibrettoWorkflowContext<S>, input: Input) => Promise<Output>;
 
-// Task 9.3: Module-level global registry
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const registry = new Map<string, LibrettoWorkflow<any, any, any>>();
-
 export class LibrettoWorkflow<Input = unknown, Output = unknown, S = {}> {
   public readonly [LIBRETTO_WORKFLOW_BRAND] = true;
-  // Task 9.2: name property set in constructor
   public readonly name: string;
   private readonly handler: LibrettoWorkflowHandler<Input, Output, S>;
 
@@ -38,23 +32,76 @@ export class LibrettoWorkflow<Input = unknown, Output = unknown, S = {}> {
   }
 }
 
-// Task 9.4: Exported _getRegistry() function
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function _getRegistry(): Map<string, LibrettoWorkflow<any, any, any>> {
-  return registry;
+export type ExportedLibrettoWorkflow = {
+  readonly [LIBRETTO_WORKFLOW_BRAND]: true;
+  readonly name: string;
+  run: (ctx: LibrettoWorkflowContext, input: unknown) => Promise<unknown>;
+};
+
+type WorkflowModuleExports = Record<string, unknown>;
+
+export function isLibrettoWorkflow(
+  value: unknown,
+): value is ExportedLibrettoWorkflow {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Record<PropertyKey, unknown>;
+  return (
+    candidate[LIBRETTO_WORKFLOW_BRAND] === true &&
+    typeof candidate.name === "string" &&
+    typeof candidate.run === "function"
+  );
 }
 
-// Task 9.1: Add name as first argument
+function addWorkflowOrThrow(
+  workflowsByName: Map<string, ExportedLibrettoWorkflow>,
+  value: unknown,
+): void {
+  if (!isLibrettoWorkflow(value)) return;
+
+  const existing = workflowsByName.get(value.name);
+  if (existing && existing !== value) {
+    throw new Error(
+      `Duplicate workflow name: "${value.name}". Each workflow() call must use a unique name.`,
+    );
+  }
+
+  workflowsByName.set(value.name, value);
+}
+
+export function getWorkflowsFromModuleExports(
+  moduleExports: WorkflowModuleExports,
+): ExportedLibrettoWorkflow[] {
+  const workflowsByName = new Map<string, ExportedLibrettoWorkflow>();
+
+  for (const [exportName, value] of Object.entries(moduleExports)) {
+    if (exportName === "workflows" && value && typeof value === "object") {
+      for (const nestedValue of Object.values(value as Record<string, unknown>)) {
+        addWorkflowOrThrow(workflowsByName, nestedValue);
+      }
+      continue;
+    }
+
+    addWorkflowOrThrow(workflowsByName, value);
+  }
+
+  return [...workflowsByName.values()];
+}
+
+export function getWorkflowFromModuleExports(
+  moduleExports: WorkflowModuleExports,
+  workflowName: string,
+): ExportedLibrettoWorkflow | null {
+  for (const workflow of getWorkflowsFromModuleExports(moduleExports)) {
+    if (workflow.name === workflowName) {
+      return workflow;
+    }
+  }
+  return null;
+}
+
 export function workflow<Input = unknown, Output = unknown, S = {}>(
   name: string,
   handler: LibrettoWorkflowHandler<Input, Output, S>,
 ): LibrettoWorkflow<Input, Output, S> {
-  if (registry.has(name)) {
-    throw new Error(
-      `Duplicate workflow name: "${name}". Each workflow() call must use a unique name.`,
-    );
-  }
-  const instance = new LibrettoWorkflow(name, handler);
-  registry.set(name, instance);
-  return instance;
+  return new LibrettoWorkflow(name, handler);
 }

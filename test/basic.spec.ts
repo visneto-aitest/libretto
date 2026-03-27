@@ -143,7 +143,7 @@ describe("basic CLI subprocess behavior", () => {
       "Run an exported Libretto workflow from a file",
     );
     expect(result.stdout).toContain(
-      "Usage: libretto run [integrationFile] [integrationExport] [options]",
+      "Usage: libretto run [integrationFile] [workflowName] [options]",
     );
     expect(result.stdout).toContain("--no-visualize");
     expect(result.stdout).toContain(
@@ -448,6 +448,33 @@ export const main = workflow("main", async () => {
 export const main = workflow("main", async () => {
   return "ok";
 });
+`,
+    );
+
+    const result = await librettoCli("run ./integration.ts main", {
+      PLAYWRIGHT_BROWSERS_PATH: join(
+        workspaceDir,
+        "missing-playwright-browsers",
+      ),
+    });
+    expect(result.stderr).not.toContain("Workflow \"main\" not found");
+  });
+
+  test("accepts workflow exported via workflows manifest", async ({
+    librettoCli,
+    workspaceDir,
+    writeWorkflow,
+  }) => {
+    await writeWorkflow(
+      "integration.ts",
+      `
+const main = workflow("main", async () => {
+  return "ok";
+});
+
+export const workflows = {
+  [main.name]: main,
+};
 `,
     );
 

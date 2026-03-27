@@ -5,8 +5,11 @@ import { cwd } from "node:process";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  getWorkflowFromModuleExports,
+  getWorkflowsFromModuleExports,
   instrumentContext,
   launchBrowser,
+  type ExportedLibrettoWorkflow,
   type LibrettoWorkflowContext,
 } from "../../index.js";
 import type { LoggerApi } from "../../shared/logger/index.js";
@@ -25,10 +28,7 @@ import {
 import { installSessionTelemetry } from "../core/session-telemetry.js";
 import type { RunIntegrationWorkerRequest } from "./run-integration-worker-protocol.js";
 
-const LIBRETTO_WORKFLOW_BRAND = Symbol.for("libretto.workflow");
-
-type LoadedLibrettoWorkflow = {
-  name: string;
+type LoadedLibrettoWorkflow = ExportedLibrettoWorkflow & {
   run: (ctx: LibrettoWorkflowContext, input: unknown) => Promise<unknown>;
 };
 
@@ -109,17 +109,6 @@ async function waitForFailureSessionRelease(args: {
   }
 }
 
-function isLoadedLibrettoWorkflow(
-  value: unknown,
-): value is LoadedLibrettoWorkflow {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<PropertyKey, unknown>;
-  return (
-    candidate[LIBRETTO_WORKFLOW_BRAND] === true &&
-    typeof candidate.run === "function"
-  );
-}
-
 function resolveLocalAuthProfilePath(domain: string): string {
   return getProfilePath(normalizeDomain(domain));
 }
@@ -168,18 +157,14 @@ async function loadWorkflowByName(
     );
   }
 
-  // Scan all exports for a LibrettoWorkflow with the matching name
-  for (const value of Object.values(loadedModule)) {
-    if (isLoadedLibrettoWorkflow(value) && (value as LoadedLibrettoWorkflow).name === workflowName) {
-      return value as LoadedLibrettoWorkflow;
-    }
+  const workflow = getWorkflowFromModuleExports(loadedModule, workflowName);
+  if (workflow) {
+    return workflow as LoadedLibrettoWorkflow;
   }
 
-  // Not found — collect available workflow names for a helpful error message
-  const availableWorkflows = Object.values(loadedModule)
-    .filter(isLoadedLibrettoWorkflow)
-    .map((w) => (w as LoadedLibrettoWorkflow).name)
-    .filter(Boolean);
+  const availableWorkflows = getWorkflowsFromModuleExports(loadedModule).map(
+    (candidate) => candidate.name,
+  );
 
   const detail =
     availableWorkflows.length > 0

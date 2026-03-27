@@ -36,7 +36,6 @@ import {
 type ExecFunction = (...args: unknown[]) => Promise<unknown>;
 type RunIntegrationCommandRequest = RunIntegrationWorkerRequest & {
   tsconfigPath?: string;
-  credentials?: Record<string, unknown>;
 };
 
 type StripTypeScriptTypesFn = (
@@ -793,8 +792,8 @@ export const runCommand = SimpleCLI.command({
     assertSessionAvailableForStart(ctx.session, ctx.logger);
 
     const params = resolveRunParams(input.params, input.paramsFile);
-    const credentials = input.credentials
-      ? parseJsonArg("--credentials", input.credentials)
+    const credentials: Record<string, unknown> | undefined = input.credentials
+      ? (parseJsonArg("--credentials", input.credentials) as Record<string, unknown>)
       : undefined;
     const headlessMode = input.headed
       ? false
@@ -813,7 +812,7 @@ export const runCommand = SimpleCLI.command({
         workflowName: input.workflowName!,
         session: ctx.session,
         params,
-        credentials: credentials as Record<string, unknown> | undefined,
+        credentials,
         tsconfigPath: input.tsconfig,
         headless: headlessMode ?? false,
         visualize,
