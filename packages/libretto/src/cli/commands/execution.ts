@@ -715,7 +715,7 @@ export const runInput = SimpleCLI.input({
       help: "Path to the integration file",
     }),
     SimpleCLI.positional("workflowName", z.string().optional(), {
-      help: "Name of the workflow to run (as registered via workflow())",
+      help: "Workflow name to run (from workflow(name, handler))",
     }),
   ],
   named: {

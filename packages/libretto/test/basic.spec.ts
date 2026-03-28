@@ -353,7 +353,7 @@ describe("basic CLI subprocess behavior", () => {
     );
   });
 
-  test("fails run when workflow name is not registered", async ({
+  test("fails run when workflow name is not exported as a Libretto workflow", async ({
     librettoCli,
     writeWorkflow,
   }) => {
@@ -437,7 +437,7 @@ export const main = workflow("main", async () => {
     expect(result.stderr).not.toContain("use `exec` to inspect it");
   }, 45_000);
 
-  test("accepts Libretto workflow registered with workflow() name", async ({
+  test("accepts Libretto workflow exported directly", async ({
     librettoCli,
     workspaceDir,
     writeWorkflow,
@@ -475,6 +475,29 @@ const main = workflow("main", async () => {
 export const workflows = {
   [main.name]: main,
 };
+`,
+    );
+
+    const result = await librettoCli("run ./integration.ts main", {
+      PLAYWRIGHT_BROWSERS_PATH: join(
+        workspaceDir,
+        "missing-playwright-browsers",
+      ),
+    });
+    expect(result.stderr).not.toContain("Workflow \"main\" not found");
+  });
+
+  test("accepts workflow exported directly from workflows binding", async ({
+    librettoCli,
+    workspaceDir,
+    writeWorkflow,
+  }) => {
+    await writeWorkflow(
+      "integration.ts",
+      `
+export const workflows = workflow("main", async () => {
+  return "ok";
+});
 `,
     );
 

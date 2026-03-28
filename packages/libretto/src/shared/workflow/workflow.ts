@@ -40,6 +40,8 @@ export type ExportedLibrettoWorkflow = {
 
 type WorkflowModuleExports = Record<string, unknown>;
 
+// Use the workflow brand instead of `instanceof` so imported workflows are
+// still recognized after loading the integration module dynamically.
 export function isLibrettoWorkflow(
   value: unknown,
 ): value is ExportedLibrettoWorkflow {
@@ -58,6 +60,8 @@ function addWorkflowOrThrow(
 ): void {
   if (!isLibrettoWorkflow(value)) return;
 
+  // Re-exporting the same workflow object is fine, but two distinct workflow
+  // instances cannot claim the same runtime name.
   const existing = workflowsByName.get(value.name);
   if (existing && existing !== value) {
     throw new Error(
@@ -75,8 +79,16 @@ export function getWorkflowsFromModuleExports(
 
   for (const [exportName, value] of Object.entries(moduleExports)) {
     if (exportName === "workflows" && value && typeof value === "object") {
-      for (const nestedValue of Object.values(value as Record<string, unknown>)) {
-        addWorkflowOrThrow(workflowsByName, nestedValue);
+      // Support both `export const workflows = workflow(...)` and
+      // `export const workflows = { myWorkflow }`.
+      if (isLibrettoWorkflow(value)) {
+        addWorkflowOrThrow(workflowsByName, value);
+      } else {
+        for (const nestedValue of Object.values(
+          value as Record<string, unknown>,
+        )) {
+          addWorkflowOrThrow(workflowsByName, nestedValue);
+        }
       }
       continue;
     }

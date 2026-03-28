@@ -169,7 +169,7 @@ async function loadWorkflowByName(
   const detail =
     availableWorkflows.length > 0
       ? ` Available workflows: ${availableWorkflows.join(", ")}`
-      : " No workflows found in this file. Make sure to call workflow() from \"libretto\".";
+      : ' No workflows found in this file. Export a workflow() instance from "libretto" directly or via `export const workflows = { ... }`.';
 
   throw new Error(
     `Workflow "${workflowName}" not found in ${absolutePath}.${detail}`,
