@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     name: "libretto-evals",
     environment: "node",
-    include: ["evals/**/*.eval.ts"],
+    include: ["**/*.eval.ts"],
     testTimeout: 0,
     maxConcurrency: 1000,
     pool: "forks",
