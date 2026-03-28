@@ -75,8 +75,12 @@ export function getWorkflowsFromModuleExports(
 
   for (const [exportName, value] of Object.entries(moduleExports)) {
     if (exportName === "workflows" && value && typeof value === "object") {
-      for (const nestedValue of Object.values(value as Record<string, unknown>)) {
-        addWorkflowOrThrow(workflowsByName, nestedValue);
+      if (isLibrettoWorkflow(value)) {
+        addWorkflowOrThrow(workflowsByName, value);
+      } else {
+        for (const nestedValue of Object.values(value as Record<string, unknown>)) {
+          addWorkflowOrThrow(workflowsByName, nestedValue);
+        }
       }
       continue;
     }
