@@ -1,4 +1,5 @@
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -180,6 +181,66 @@ describe("createHostedDeployPackage", () => {
         });
         expect(bundle).toContain('export const testWorkflow = createWorkflowProxy("testWorkflow");');
         expect(implementation).toContain("lodash");
+      } finally {
+        deployPackage.cleanup();
+      }
+    } finally {
+      rmSync(workspaceRoot, { force: true, recursive: true });
+    }
+  });
+
+  it("vendors the current libretto package when the source manifest uses a local-only libretto spec", async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), "libretto-deploy-test-"));
+    const sourceDir = join(workspaceRoot, "apps", "worker");
+    const entryPoint = join(sourceDir, "src", "workflow.ts");
+
+    try {
+      mkdirSync(join(sourceDir, "src"), { recursive: true });
+
+      writeJson(join(sourceDir, "package.json"), {
+        name: "@repo/worker",
+        private: true,
+        type: "module",
+        dependencies: {
+          libretto: "github:saffron-health/libretto#feat/deploy-cli&path:/packages/libretto",
+        },
+      });
+
+      writeFileSync(
+        entryPoint,
+        [
+          'import { workflow } from "libretto";',
+          "",
+          "export const testWorkflow = workflow(",
+          '  "testWorkflow",',
+          "  async () => ({ ok: true }),",
+          ");",
+          "",
+        ].join("\n"),
+      );
+
+      const deployPackage = await createHostedDeployPackage({
+        deploymentName: "vendored-libretto-worker",
+        entryPoint,
+        sourceDir,
+      });
+
+      try {
+        const deployManifest = JSON.parse(
+          readFileSync(join(deployPackage.outputDir, "package.json"), "utf8"),
+        ) as {
+          dependencies?: Record<string, string>;
+        };
+
+        expect(deployManifest.dependencies).toEqual({
+          libretto: "file:./libretto",
+        });
+        expect(existsSync(join(deployPackage.outputDir, "libretto", "package.json"))).toBe(
+          true,
+        );
+        expect(existsSync(join(deployPackage.outputDir, "libretto", "dist", "index.js"))).toBe(
+          true,
+        );
       } finally {
         deployPackage.cleanup();
       }

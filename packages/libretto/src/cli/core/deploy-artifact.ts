@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -77,6 +78,9 @@ const SOURCE_FILE_EXTENSIONS = [
   "/index.cjs",
 ] as const;
 const CURRENT_LIBRETTO_VERSION = readCurrentLibrettoVersion();
+const CURRENT_LIBRETTO_PACKAGE_DIR = fileURLToPath(
+  new URL("../../..", import.meta.url),
+);
 
 function readCurrentLibrettoVersion(): string {
   const packageJsonPath = fileURLToPath(
@@ -531,6 +535,7 @@ function resolveDependencyVersion(
 function writeDeployManifest(args: {
   additionalExternals: readonly string[];
   deploymentName: string;
+  librettoDependency: string;
   outputDir: string;
   sourceDir: string;
 }): void {
@@ -540,11 +545,9 @@ function writeDeployManifest(args: {
       ...args.additionalExternals,
     ].map((packageName) => [
       packageName,
-      resolveDependencyVersion(
-        args.sourceDir,
-        packageName,
-        packageName === "libretto" ? CURRENT_LIBRETTO_VERSION : undefined,
-      ),
+      packageName === "libretto"
+        ? args.librettoDependency
+        : resolveDependencyVersion(args.sourceDir, packageName),
     ]),
   );
 
@@ -560,6 +563,44 @@ function writeDeployManifest(args: {
       null,
       2,
     ) + "\n",
+  );
+}
+
+function shouldVendorCurrentLibretto(versionSpec: string): boolean {
+  return (
+    versionSpec.startsWith("file:") ||
+    versionSpec.startsWith("link:") ||
+    versionSpec.startsWith("workspace:") ||
+    versionSpec.startsWith("portal:") ||
+    versionSpec.includes("&path:")
+  );
+}
+
+function resolveLibrettoDependency(sourceDir: string): string {
+  const versionSpec = resolveDependencyVersion(
+    sourceDir,
+    "libretto",
+    CURRENT_LIBRETTO_VERSION,
+  );
+
+  if (shouldVendorCurrentLibretto(versionSpec)) {
+    return "file:./libretto";
+  }
+
+  return versionSpec;
+}
+
+function copyCurrentLibrettoPackage(outputDir: string): void {
+  const bundledLibrettoDir = join(outputDir, "libretto");
+  mkdirSync(bundledLibrettoDir, { recursive: true });
+  cpSync(
+    join(CURRENT_LIBRETTO_PACKAGE_DIR, "dist"),
+    join(bundledLibrettoDir, "dist"),
+    { recursive: true },
+  );
+  cpSync(
+    join(CURRENT_LIBRETTO_PACKAGE_DIR, "package.json"),
+    join(bundledLibrettoDir, "package.json"),
   );
 }
 
@@ -701,6 +742,7 @@ export async function createHostedDeployPackage(
   const tempRoot = mkdtempSync(join(tmpdir(), "libretto-deploy-"));
   const outputDir = join(tempRoot, "deploy");
   mkdirSync(outputDir, { recursive: true });
+  const librettoDependency = resolveLibrettoDependency(absSourceDir);
 
   const additionalExternals = [...new Set(args.additionalExternals ?? [])];
   // These packages stay out of the implementation bundle. The generated
@@ -783,12 +825,17 @@ export async function createHostedDeployPackage(
     );
   }
 
+  if (librettoDependency === "file:./libretto") {
+    copyCurrentLibrettoPackage(outputDir);
+  }
+
   // The generated manifest lists only packages that stay outside the
   // implementation bundle. Hosted deploy installs them into the deployed
   // package, and the deployed code loads them from node_modules.
   writeDeployManifest({
     additionalExternals,
     deploymentName: args.deploymentName,
+    librettoDependency,
     outputDir,
     sourceDir: absSourceDir,
   });
