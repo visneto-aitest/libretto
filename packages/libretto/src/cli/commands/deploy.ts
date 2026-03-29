@@ -1,13 +1,5 @@
-import { execSync } from "node:child_process";
-import {
-  cpSync,
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
 import { z } from "zod";
+import { buildHostedDeployTarball } from "../core/deploy-artifact.js";
 import { SimpleCLI } from "../framework/simple-cli.js";
 
 type DeploymentStatus = "building" | "ready" | "failed";
@@ -55,30 +47,6 @@ async function postJson(
     },
     body: JSON.stringify({ json: input }),
   });
-}
-
-function buildSourceTarball(sourceDir: string): string {
-  const absSourceDir = resolve(sourceDir);
-
-  const pkgJsonPath = join(absSourceDir, "package.json");
-  try {
-    readFileSync(pkgJsonPath, "utf8");
-  } catch {
-    throw new Error(
-      `No package.json found in ${absSourceDir}. Deploy source must contain a package.json.`,
-    );
-  }
-
-  const dir = join(tmpdir(), `libretto-deploy-${Date.now()}`);
-  mkdirSync(dir, { recursive: true });
-
-  cpSync(absSourceDir, dir, { recursive: true });
-
-  const tarPath = join(dir, "source.tar.gz");
-  execSync(
-    `tar czf "${tarPath}" --exclude=source.tar.gz --exclude=node_modules --exclude=.git -C "${dir}" .`,
-  );
-  return readFileSync(tarPath).toString("base64");
 }
 
 async function pollDeployment(
@@ -134,6 +102,21 @@ export const deployInput = SimpleCLI.input({
       name: "entry-point",
       help: "Entry point file (default: index.ts)",
     }),
+    external: SimpleCLI.option(
+      z
+        .string()
+        .optional()
+        .transform((value) =>
+          value
+            ?.split(",")
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0) ?? [],
+        ),
+      {
+        help:
+          "Comma-separated packages to keep out of the bundle and install into the deployed package",
+      },
+    ),
   },
 });
 
@@ -145,15 +128,23 @@ export const deployCommand = SimpleCLI.command({
   .handle(async ({ input }) => {
     const { apiUrl, apiKey } = getConfig();
 
-    console.log(`Packaging source from ${resolve(input.sourceDir)}...`);
-    const source = buildSourceTarball(input.sourceDir);
+    // Hosted deploy uploads a generated artifact with a deploy entrypoint and
+    // a minimal manifest. Bundled code is embedded in the generated files;
+    // external packages are listed in the manifest for installation.
+    console.log("Bundling hosted deployment artifact...");
+    const { entryPoint, source } = await buildHostedDeployTarball({
+      additionalExternals: input.external,
+      deploymentName: input.name,
+      entryPoint: input.entryPoint,
+      sourceDir: input.sourceDir,
+    });
 
     const createPayload: Record<string, unknown> = {
       name: input.name,
       source,
+      entry_point: entryPoint,
     };
     if (input.description) createPayload.description = input.description;
-    if (input.entryPoint) createPayload.entry_point = input.entryPoint;
 
     console.log("Uploading deployment...");
     const res = await postJson(
