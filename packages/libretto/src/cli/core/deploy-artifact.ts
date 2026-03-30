@@ -701,8 +701,9 @@ const BUNDLE_FILENAME = join(
   tmpdir(),
   ${JSON.stringify(outputPrefix)} + BUNDLE_HASH + ".cjs",
 );
-const nativeRequire =
-  typeof require === "function" ? require : createRequire(import.meta.url);
+const nativeRequire = createRequire(
+  join(tmpdir(), ${JSON.stringify("libretto-deploy-bootstrap.cjs")}),
+);
 
 function ensureBundleFile() {
   if (!existsSync(BUNDLE_FILENAME)) {
