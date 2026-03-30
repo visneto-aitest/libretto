@@ -161,7 +161,9 @@ function readWorkspacePatterns(rootDir: string): string[] {
     const patterns: string[] = [];
     let inPackagesBlock = false;
 
-    for (const rawLine of readFileSync(pnpmWorkspacePath, "utf8").split(/\r?\n/)) {
+    for (const rawLine of readFileSync(pnpmWorkspacePath, "utf8").split(
+      /\r?\n/,
+    )) {
       const trimmed = rawLine.trim();
       if (!inPackagesBlock) {
         if (trimmed === "packages:") {
@@ -226,7 +228,9 @@ function expandWorkspacePattern(rootDir: string, pattern: string): string[] {
     .map((entry) => join(baseDir, entry.name));
 }
 
-function discoverWorkspacePackages(startDir: string): Map<string, WorkspacePackage> {
+function discoverWorkspacePackages(
+  startDir: string,
+): Map<string, WorkspacePackage> {
   const workspaceRoot = findWorkspaceRoot(startDir);
   if (!workspaceRoot) {
     return new Map();
@@ -257,8 +261,8 @@ function findMatchingWorkspacePackage(
   info: WorkspacePackage;
   subpath: string;
 } | null {
-  const names = [...workspacePackages.keys()].sort((left, right) =>
-    right.length - left.length,
+  const names = [...workspacePackages.keys()].sort(
+    (left, right) => right.length - left.length,
   );
 
   for (const name of names) {
@@ -335,7 +339,11 @@ function resolveExportTarget(
     if (!(condition in record)) {
       continue;
     }
-    const resolved = resolveExportTarget(record[condition], packageDir, replacement);
+    const resolved = resolveExportTarget(
+      record[condition],
+      packageDir,
+      replacement,
+    );
     if (resolved) {
       return resolved;
     }
@@ -360,7 +368,10 @@ function resolveExportsSubpath(
     return null;
   }
 
-  if (subpath === ".") {
+  if (
+    subpath === "." &&
+    (typeof exportsField === "string" || Array.isArray(exportsField))
+  ) {
     const rootExport = resolveExportTarget(exportsField, packageDir);
     if (rootExport) {
       return rootExport;
@@ -372,7 +383,9 @@ function resolveExportsSubpath(
   }
 
   const record = exportsField as Record<string, unknown>;
-  const hasExplicitSubpathKeys = Object.keys(record).some((key) => key.startsWith("."));
+  const hasExplicitSubpathKeys = Object.keys(record).some((key) =>
+    key.startsWith("."),
+  );
 
   if (!hasExplicitSubpathKeys) {
     return subpath === "." ? resolveExportTarget(record, packageDir) : null;
@@ -393,7 +406,10 @@ function resolveExportsSubpath(
     if (!subpath.startsWith(prefix) || !subpath.endsWith(suffix)) {
       continue;
     }
-    const replacement = subpath.slice(prefix.length, subpath.length - suffix.length);
+    const replacement = subpath.slice(
+      prefix.length,
+      subpath.length - suffix.length,
+    );
     const resolved = resolveExportTarget(value, packageDir, replacement);
     if (resolved) {
       return resolved;
@@ -407,7 +423,11 @@ function resolveWorkspaceSourcePath(
   info: WorkspacePackage,
   subpath: string,
 ): string | null {
-  const viaExports = resolveExportsSubpath(info.manifest.exports, info.dir, subpath);
+  const viaExports = resolveExportsSubpath(
+    info.manifest.exports,
+    info.dir,
+    subpath,
+  );
   if (viaExports) {
     return viaExports;
   }
@@ -453,12 +473,18 @@ function workspaceSourcePlugin(
           return null;
         }
 
-        const match = findMatchingWorkspacePackage(args.path, workspacePackages);
+        const match = findMatchingWorkspacePackage(
+          args.path,
+          workspacePackages,
+        );
         if (!match) {
           return null;
         }
 
-        const resolvedPath = resolveWorkspaceSourcePath(match.info, match.subpath);
+        const resolvedPath = resolveWorkspaceSourcePath(
+          match.info,
+          match.subpath,
+        );
         if (!resolvedPath) {
           throw new Error(
             `Unable to resolve workspace import "${args.path}" from ${match.info.dir}.`,
@@ -540,15 +566,14 @@ function writeDeployManifest(args: {
   sourceDir: string;
 }): void {
   const dependencies = Object.fromEntries(
-    [
-      ...BUILT_IN_MANIFEST_DEPENDENCIES,
-      ...args.additionalExternals,
-    ].map((packageName) => [
-      packageName,
-      packageName === "libretto"
-        ? args.librettoDependency
-        : resolveDependencyVersion(args.sourceDir, packageName),
-    ]),
+    [...BUILT_IN_MANIFEST_DEPENDENCIES, ...args.additionalExternals].map(
+      (packageName) => [
+        packageName,
+        packageName === "libretto"
+          ? args.librettoDependency
+          : resolveDependencyVersion(args.sourceDir, packageName),
+      ],
+    ),
   );
 
   writeFileSync(
@@ -610,7 +635,10 @@ function formatBuildError(error: unknown): string {
   }
 
   const candidate = error as Error & {
-    errors?: Array<{ location?: { file?: string; line?: number; column?: number }; text?: string }>;
+    errors?: Array<{
+      location?: { file?: string; line?: number; column?: number };
+      text?: string;
+    }>;
   };
   if (!Array.isArray(candidate.errors) || candidate.errors.length === 0) {
     return error.message;
@@ -671,13 +699,16 @@ function createBootstrapSource(args: {
     .update(args.bundleBuffer)
     .digest("hex")
     .slice(0, 16);
-  const bundleBase64 = gzipSync(args.bundleBuffer, { level: 9 }).toString("base64");
+  const bundleBase64 = gzipSync(args.bundleBuffer, { level: 9 }).toString(
+    "base64",
+  );
   const outputPrefix = `${normalizePackageName(args.deploymentName)}-`;
   const hasDefaultExport = args.exportNames.includes("default");
   const exportLines = args.exportNames
     .filter((name) => name !== "default")
     .map(
-      (name) => `export const ${name} = createWorkflowProxy(${JSON.stringify(name)});`,
+      (name) =>
+        `export const ${name} = createWorkflowProxy(${JSON.stringify(name)});`,
     )
     .join("\n");
   const defaultExportLine = hasDefaultExport
@@ -734,6 +765,91 @@ ${defaultExportLine}
 `;
 }
 
+async function writeBundledDeployEntrypoint(args: {
+  absEntryPoint: string;
+  absSourceDir: string;
+  deploymentName: string;
+  externalPackages: ReadonlySet<string>;
+  outputDir: string;
+  workspacePackages: Map<string, WorkspacePackage>;
+}): Promise<void> {
+  try {
+    // The implementation bundle is CommonJS so the bootstrap can load it lazily
+    // with createRequire() after workflow discovery, while external packages
+    // continue to load through normal Node module resolution.
+    const implementationBuild = await build({
+      absWorkingDir: args.absSourceDir,
+      bundle: true,
+      entryPoints: [args.absEntryPoint],
+      external: [...args.externalPackages],
+      format: "cjs",
+      outfile: "prebundled.cjs",
+      platform: "node",
+      plugins: [
+        workspaceSourcePlugin(args.workspacePackages, args.externalPackages),
+      ],
+      splitting: false,
+      target: "node20",
+      write: false,
+    });
+
+    const bundledImplementation = implementationBuild.outputFiles?.find(
+      (file) => file.path.endsWith("prebundled.cjs"),
+    );
+    if (!bundledImplementation) {
+      throw new Error(
+        "Bundler did not produce a deployment implementation file.",
+      );
+    }
+
+    // A separate ESM bundle is used only to read the entry module's exported
+    // workflow names. Scanning the CommonJS bundle would also see exports from
+    // bundled dependencies, which is not the deploy surface.
+    const exportBuild = await build({
+      absWorkingDir: args.absSourceDir,
+      bundle: true,
+      entryPoints: [args.absEntryPoint],
+      external: [...args.externalPackages],
+      format: "esm",
+      outfile: "entry-exports.js",
+      platform: "node",
+      plugins: [
+        workspaceSourcePlugin(args.workspacePackages, args.externalPackages),
+      ],
+      splitting: false,
+      target: "node20",
+      write: false,
+    });
+
+    const bundledExports = exportBuild.outputFiles?.find((file) =>
+      file.path.endsWith("entry-exports.js"),
+    );
+    if (!bundledExports) {
+      throw new Error("Bundler did not produce an export analysis file.");
+    }
+
+    const exportNames = extractExportNamesFromEsmBundle(bundledExports.text);
+    if (exportNames.length === 0) {
+      throw new Error(
+        `No named exports were found in ${args.absEntryPoint}. Hosted deploy expects the entry point to export one or more workflows.`,
+      );
+    }
+
+    writeFileSync(
+      join(args.outputDir, "index.js"),
+      createBootstrapSource({
+        bundleBuffer: Buffer.from(bundledImplementation.contents),
+        deploymentName: args.deploymentName,
+        exportNames,
+      }),
+    );
+  } catch (error) {
+    throw new Error(
+      `Failed to bundle deploy entry point ${args.absEntryPoint}.\n${formatBuildError(error)}`,
+    );
+  }
+}
+
 export async function createHostedDeployPackage(
   args: CreateHostedDeployPackageArgs,
 ): Promise<HostedDeployPackage> {
@@ -755,100 +871,50 @@ export async function createHostedDeployPackage(
     ...additionalExternals,
   ]);
   const workspacePackages = discoverWorkspacePackages(absSourceDir);
+  let callerOwnsTempRoot = false;
 
   try {
-    // The implementation bundle is CommonJS so the bootstrap can load it lazily
-    // with createRequire() after workflow discovery, while external packages
-    // continue to load through normal Node module resolution.
-    const implementationBuild = await build({
-      absWorkingDir: absSourceDir,
-      bundle: true,
-      entryPoints: [absEntryPoint],
-      external: [...externalPackages],
-      format: "cjs",
-      outfile: "prebundled.cjs",
-      platform: "node",
-      plugins: [workspaceSourcePlugin(workspacePackages, externalPackages)],
-      splitting: false,
-      target: "node20",
-      write: false,
+    await writeBundledDeployEntrypoint({
+      absEntryPoint,
+      absSourceDir,
+      deploymentName: args.deploymentName,
+      externalPackages,
+      outputDir,
+      workspacePackages,
     });
 
-    const bundledImplementation = implementationBuild.outputFiles?.find((file) =>
-      file.path.endsWith("prebundled.cjs"),
-    );
-    if (!bundledImplementation) {
-      throw new Error("Bundler did not produce a deployment implementation file.");
+    if (librettoDependency === "file:./libretto") {
+      copyCurrentLibrettoPackage(outputDir);
     }
 
-    // A separate ESM bundle is used only to read the entry module's exported
-    // workflow names. Scanning the CommonJS bundle would also see exports from
-    // bundled dependencies, which is not the deploy surface.
-    const exportBuild = await build({
-      absWorkingDir: absSourceDir,
-      bundle: true,
-      entryPoints: [absEntryPoint],
-      external: [...externalPackages],
-      format: "esm",
-      outfile: "entry-exports.js",
-      platform: "node",
-      plugins: [workspaceSourcePlugin(workspacePackages, externalPackages)],
-      splitting: false,
-      target: "node20",
-      write: false,
+    // The generated manifest lists only packages that stay outside the
+    // implementation bundle. Hosted deploy installs them into the deployed
+    // package, and the deployed code loads them from node_modules.
+    writeDeployManifest({
+      additionalExternals,
+      deploymentName: args.deploymentName,
+      librettoDependency,
+      outputDir,
+      sourceDir: absSourceDir,
     });
 
-    const bundledExports = exportBuild.outputFiles?.find((file) =>
-      file.path.endsWith("entry-exports.js"),
-    );
-    if (!bundledExports) {
-      throw new Error("Bundler did not produce an export analysis file.");
-    }
-
-    const exportNames = extractExportNamesFromEsmBundle(bundledExports.text);
-    if (exportNames.length === 0) {
-      throw new Error(
-        `No named exports were found in ${absEntryPoint}. Hosted deploy expects the entry point to export one or more workflows.`,
-      );
-    }
-
-    writeFileSync(
-      join(outputDir, "index.js"),
-      createBootstrapSource({
-        bundleBuffer: Buffer.from(bundledImplementation.contents),
-        deploymentName: args.deploymentName,
-        exportNames,
-      }),
-    );
-  } catch (error) {
-    rmSync(tempRoot, { force: true, recursive: true });
-    throw new Error(
-      `Failed to bundle deploy entry point ${absEntryPoint}.\n${formatBuildError(error)}`,
-    );
-  }
-
-  if (librettoDependency === "file:./libretto") {
-    copyCurrentLibrettoPackage(outputDir);
-  }
-
-  // The generated manifest lists only packages that stay outside the
-  // implementation bundle. Hosted deploy installs them into the deployed
-  // package, and the deployed code loads them from node_modules.
-  writeDeployManifest({
-    additionalExternals,
-    deploymentName: args.deploymentName,
-    librettoDependency,
-    outputDir,
-    sourceDir: absSourceDir,
-  });
-
-  return {
-    cleanup: () => {
+    // Success transfers ownership of the temp directory to the caller, who is
+    // responsible for invoking cleanup() after the tarball/upload step.
+    callerOwnsTempRoot = true;
+    return {
+      cleanup: () => {
+        rmSync(tempRoot, { force: true, recursive: true });
+      },
+      entryPoint: "index.js",
+      outputDir,
+    };
+  } finally {
+    // On any failure before we return, this function still owns the temp dir
+    // and must remove it to avoid leaking deploy workspaces in /tmp.
+    if (!callerOwnsTempRoot) {
       rmSync(tempRoot, { force: true, recursive: true });
-    },
-    entryPoint: "index.js",
-    outputDir,
-  };
+    }
+  }
 }
 
 export async function buildHostedDeployTarball(
