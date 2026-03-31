@@ -113,6 +113,7 @@ describe("basic CLI subprocess behavior", () => {
     await evaluate(result.stdout).toMatch(
       "Shows the root CLI help with top-level command usage and includes the snapshot command description.",
     );
+    expect(result.stdout).not.toContain("cloud <subcommand>");
     expect(result.stderr).toBe("");
   });
 

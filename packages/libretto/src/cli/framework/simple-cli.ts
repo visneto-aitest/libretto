@@ -761,7 +761,7 @@ export class SimpleCLIApp {
 
   private renderRootHelp(): string {
     const lines = [`Usage: ${this.name} <command>`, "", "Commands:"];
-    for (const entry of this.getImmediateRouteEntries([])) {
+    for (const entry of this.getRootHelpEntries()) {
       lines.push(formatListEntry(entry.label, entry.description));
     }
     return lines.join("\n");
@@ -860,7 +860,6 @@ export class SimpleCLIApp {
       }
 
       const command = this.findCommandByPath(routeEntry.path);
-      if (command?.experimental) continue;
       entries.push({
         label: token,
         description: command?.description,
@@ -868,6 +867,33 @@ export class SimpleCLIApp {
     }
 
     return entries;
+  }
+
+  private getRootHelpEntries(): Array<{
+    label: string;
+    description?: string;
+  }> {
+    return this.getImmediateRouteEntries([]).filter((entry) => {
+      const token = entry.label.replace(/\s+<subcommand>$/, "");
+      const group = this.findGroupByPath([token]);
+      if (!group) {
+        return true;
+      }
+      return this.groupHasVisibleNonExperimentalCommand(group.path);
+    });
+  }
+
+  private groupHasVisibleNonExperimentalCommand(path: readonly string[]): boolean {
+    for (const routeEntry of this.routeEntries) {
+      if (routeEntry.kind !== "command") continue;
+      if (!pathStartsWith(routeEntry.path, path)) continue;
+      const command = this.findCommandByPath(routeEntry.path);
+      if (command && !command.experimental) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private findBestMatchingCommand(
