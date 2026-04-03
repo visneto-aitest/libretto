@@ -950,7 +950,7 @@ export default workflow("main", async (ctx) => {
       `
 let resumedOnce = false;
 
-export const main = workflow("main", async (ctx) => {
+export default workflow("main", async (ctx) => {
   console.log("WORKFLOW_BEFORE_PAUSE");
   if (!resumedOnce) {
     resumedOnce = true;
@@ -963,7 +963,7 @@ export const main = workflow("main", async (ctx) => {
     );
 
     const paused = await librettoCli(
-      `run "${integrationFilePath}" main --session ${session} --headless --read-only`,
+      `run "${integrationFilePath}" --session ${session} --headless --read-only`,
     );
     expect(paused.stdout).toContain("WORKFLOW_BEFORE_PAUSE");
     expect(paused.stdout).toContain("Workflow paused.");

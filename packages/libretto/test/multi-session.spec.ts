@@ -91,7 +91,7 @@ export default workflow("main", async () => {
     const integrationFilePath = await writeWorkflow(
       "integration-run-write-access.mjs",
       `
-export const main = workflow("main", async () => {
+export default workflow("main", async () => {
   console.log("RUN_MODE_OK");
 });
 `,
@@ -99,7 +99,7 @@ export const main = workflow("main", async () => {
 
     const runSession = "run-write-access-session";
     const runResult = await librettoCli(
-      `run "${integrationFilePath}" main --session ${runSession} --headless`,
+      `run "${integrationFilePath}" --session ${runSession} --headless`,
     );
     expect(runResult.stdout).toContain("RUN_MODE_OK");
     expect(runResult.stdout).toContain("Integration completed.");
@@ -119,7 +119,7 @@ export const main = workflow("main", async () => {
     const integrationFilePath = await writeWorkflow(
       "integration-run-readonly.mjs",
       `
-export const main = workflow("main", async () => {
+export default workflow("main", async () => {
   console.log("RUN_READONLY_OK");
 });
 `,
@@ -127,7 +127,7 @@ export const main = workflow("main", async () => {
 
     const session = "run-readonly-session";
     const runResult = await librettoCli(
-      `run "${integrationFilePath}" main --session ${session} --headless --read-only`,
+      `run "${integrationFilePath}" --session ${session} --headless --read-only`,
     );
     expect(runResult.stdout).toContain("RUN_READONLY_OK");
     expect(runResult.stdout).toContain("Integration completed.");

@@ -16,7 +16,11 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
-import { LIBRETTO_WORKFLOW_BRAND } from "../../shared/workflow/workflow.js";
+import {
+  getWorkflowFromModuleExports,
+  getWorkflowsFromModuleExports,
+  LIBRETTO_WORKFLOW_BRAND,
+} from "../../shared/workflow/workflow.js";
 
 type PackageManifest = {
   name?: string;
@@ -733,6 +737,7 @@ function discoverBundledWorkflowNames(args: {
   const originalRequire = Module.prototype.require;
   const workflowNames = new Set<string>();
   const discoveryLibrettoModule = createDiscoveryLibrettoModule(workflowNames);
+  let loadedModuleExports: Record<string, unknown> | null = null;
 
   try {
     writeFileSync(discoveryPath, args.bundleBuffer);
@@ -746,7 +751,7 @@ function discoverBundledWorkflowNames(args: {
       }
       return originalRequire.call(this, id);
     };
-    require(discoveryPath);
+    loadedModuleExports = require(discoveryPath) as Record<string, unknown>;
   } catch (error) {
     throw new Error(
       `Failed to evaluate deploy entry point ${args.absEntryPoint} while discovering workflows.\n${formatBuildError(error)}`,
@@ -766,6 +771,21 @@ function discoverBundledWorkflowNames(args: {
   if (discoveredWorkflowNames.length === 0) {
     throw new Error(
       `No workflows were found in ${args.absEntryPoint}. Import the workflow files you want to deploy from the entry point, or export a workflow directly from it.`,
+    );
+  }
+
+  const exportedWorkflowNames = new Set(
+    getWorkflowsFromModuleExports(loadedModuleExports ?? {}).map(
+      (workflow) => workflow.name,
+    ),
+  );
+  const nonExportedWorkflowNames = discoveredWorkflowNames.filter(
+    (name) => !exportedWorkflowNames.has(name),
+  );
+
+  if (nonExportedWorkflowNames.length > 0) {
+    throw new Error(
+      `Workflows discovered in ${args.absEntryPoint} must be exported from the deploy entry point. Re-export them from the entry point or export them through a \`workflows\` object. Non-exported workflows: ${nonExportedWorkflowNames.join(", ")}`,
     );
   }
 
@@ -801,7 +821,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
-import { workflow } from "libretto";
+import { getWorkflowFromModuleExports, workflow } from "libretto";
 
 const BUNDLE_HASH = ${JSON.stringify(bundleHash)};
 const BUNDLE_GZIP_BASE64 = ${JSON.stringify(bundleBase64)};
@@ -824,13 +844,13 @@ function ensureBundleFile() {
   return BUNDLE_FILENAME;
 }
 
-function createWorkflowProxy(exportName) {
-  return workflow(exportName, async (ctx, input) => {
+function createWorkflowProxy(workflowName) {
+  return workflow(workflowName, async (ctx, input) => {
     const impl = nativeRequire(ensureBundleFile());
-    const target = impl[exportName];
+    const target = getWorkflowFromModuleExports(impl, workflowName);
     if (!target || typeof target.run !== "function") {
       throw new Error(
-        \`Expected workflow export "\${exportName}" to be available in the bundled deployment implementation.\`,
+        \`Expected exported workflow "\${workflowName}" to be available in the bundled deployment implementation.\`,
       );
     }
     return await target.run(ctx, input);
