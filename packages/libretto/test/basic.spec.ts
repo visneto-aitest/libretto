@@ -331,7 +331,7 @@ describe("basic CLI subprocess behavior", () => {
   }) => {
     const result = await librettoCli("help run");
     expect(result.stdout).toContain(
-      "Run an exported Libretto workflow from a file",
+      "Run the default-exported Libretto workflow from a file",
     );
     expect(result.stdout).toContain(
       "Usage: libretto run [integrationFile] [options]",
