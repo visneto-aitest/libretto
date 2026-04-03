@@ -48,7 +48,7 @@ Profiles:
   Local profiles are machine-local and are not shared with other users/environments.
   Sessions can expire; if run fails auth, log in again and re-save the profile.
 
-  Sessions:
+Sessions:
   Session state is stored in .libretto/sessions/<session>/state.json
   CLI logs are stored in .libretto/sessions/<session>/logs.jsonl
   Each session runs an isolated browser instance on a dynamic port.
