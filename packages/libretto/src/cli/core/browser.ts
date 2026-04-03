@@ -1024,17 +1024,25 @@ export async function runConnect(
     `Connecting to CDP endpoint at ${endpoint} (session: ${session})...`,
   );
 
-  // Verify the CDP endpoint is reachable
-  const versionUrl = `${parsedUrl.protocol}//${parsedUrl.host}/json/version`;
-  try {
-    const resp = await fetch(versionUrl);
-    const versionInfo = await resp.json();
-    logger.info("connect-version-ok", { versionUrl, versionInfo });
-  } catch (err) {
-    logger.error("connect-version-failed", { versionUrl, error: err });
-    throw new Error(
-      `Cannot reach CDP endpoint at ${versionUrl}. Make sure the target is running and accessible at ${parsedUrl.host}.`,
-    );
+  // Verify the CDP endpoint is reachable via /json/version.
+  // Skip for WSS/WS URLs — WebSocket-only proxies (e.g. Kernel) don't serve HTTP.
+  if (parsedUrl.protocol !== "wss:" && parsedUrl.protocol !== "ws:") {
+    const versionUrl = `${parsedUrl.protocol}//${parsedUrl.host}/json/version`;
+    try {
+      const resp = await fetch(versionUrl);
+      const versionInfo = await resp.json();
+      logger.info("connect-version-ok", { versionUrl, versionInfo });
+    } catch (err) {
+      logger.error("connect-version-failed", { versionUrl, error: err });
+      throw new Error(
+        `Cannot reach CDP endpoint at ${versionUrl}. Make sure the target is running and accessible at ${parsedUrl.host}.`,
+      );
+    }
+  } else {
+    logger.info("connect-skip-version-check", {
+      reason: "WebSocket-only endpoint, skipping HTTP version check",
+      endpoint,
+    });
   }
 
   // Connect via CDP using the full endpoint URL
