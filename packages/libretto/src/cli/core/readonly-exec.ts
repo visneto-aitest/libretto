@@ -23,13 +23,7 @@ const PAGE_LOCATOR_FACTORY_METHODS = new Set([
   "getByTestId",
 ]);
 
-const PAGE_DENIED_PROPERTIES = new Set([
-  "keyboard",
-  "mouse",
-  "touchscreen",
-  "request",
-  "coverage",
-]);
+const PAGE_ALLOWED_PROPERTIES = new Set<string>([]);
 
 const LOCATOR_READ_METHODS = new Set([
   "textContent",
@@ -70,6 +64,8 @@ const LOCATOR_FACTORY_METHODS = new Set([
 const LOCATOR_COLLECTION_FACTORY_METHODS = new Set(["all"]);
 
 const LOCATOR_SCROLL_METHODS = new Set(["scrollIntoViewIfNeeded"]);
+
+const LOCATOR_ALLOWED_PROPERTIES = new Set<string>([]);
 
 type ReadonlyExecOptions = {
   onActivity?: () => void;
@@ -120,7 +116,10 @@ export function wrapLocatorForReadonlyExec(
 
       const value = Reflect.get(target, prop, target);
       if (typeof value !== "function") {
-        return value;
+        if (LOCATOR_ALLOWED_PROPERTIES.has(prop)) {
+          return value;
+        }
+        return denyOperation("locator", prop);
       }
 
       if (LOCATOR_READ_METHODS.has(prop)) {
@@ -177,13 +176,12 @@ export function wrapPageForReadonlyExec(
         return Reflect.get(target, prop, receiver);
       }
 
-      if (PAGE_DENIED_PROPERTIES.has(prop)) {
-        return denyOperation("page", prop);
-      }
-
       const value = Reflect.get(target, prop, target);
       if (typeof value !== "function") {
-        return value;
+        if (PAGE_ALLOWED_PROPERTIES.has(prop)) {
+          return value;
+        }
+        return denyOperation("page", prop);
       }
 
       if (PAGE_READ_METHODS.has(prop)) {

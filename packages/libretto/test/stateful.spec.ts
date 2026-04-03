@@ -533,6 +533,13 @@ describe("state-driven CLI subprocess behavior", () => {
       "ReadonlyExecDenied: page.mouse is blocked in readonly-exec",
     );
 
+    const blockedClock = await librettoCli(
+      `readonly-exec "return typeof page.clock" --session ${session}`,
+    );
+    expect(blockedClock.stderr).toContain(
+      "ReadonlyExecDenied: page.clock is blocked in readonly-exec",
+    );
+
     const currentUrlResult = await librettoCli(
       `readonly-exec "return page.url()" --session ${session}`,
     );
