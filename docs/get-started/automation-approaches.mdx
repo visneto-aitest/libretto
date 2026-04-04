@@ -12,7 +12,7 @@ Libretto supports four distinct approaches to capturing data and automating web 
 | -------------------------------------------- | ------------------ | --------------------------------------------------- |
 | Regular Playwright                           | Low-Moderate       | Simple DOM extraction, server-rendered sites        |
 | Passive interception (`page.on('response')`) | Low                | SPAs that load data via API calls during navigation |
-| In-browser fetch (`pageRequest()`)           | Low to moderate    | Deep pagination, bulk queries without UI clicking   |
+| In-browser fetch (`pageRequest()`)           | Low-Moderate    | Deep pagination, bulk queries without UI clicking   |
 | Direct HTTP from Node.js                     | Very high          | Public/documented APIs with no bot detection        |
 
 <Tip>
@@ -190,7 +190,7 @@ Libretto supports four distinct approaches to capturing data and automating web 
 
 | Criteria                           | Regular Playwright      | Passive interception         | In-browser fetch        | Direct HTTP             |
 | ---------------------------------- | ----------------------- | ---------------------------- | ----------------------- | ----------------------- |
-| **Bot detection risk**             | Low-Moderate            | Low                          | Low–Moderate            | Very High               |
+| **Bot detection risk**             | Low-Moderate            | Low                          | Low-Moderate            | Very High               |
 | **Browser fingerprint risk**       | Yes                     | Yes                          | Yes                     | N/A (wrong fingerprint) |
 | **Network fingerprint risk**       | None (browser requests) | None (browser requests)      | None (browser requests) | Very High               |
 | **API monitoring risk**            | None                    | None                         | Low (fetch patching)    | N/A                     |
