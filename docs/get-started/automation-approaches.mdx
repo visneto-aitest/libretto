@@ -10,7 +10,7 @@ Libretto supports four distinct approaches to capturing data and automating web 
 
 | Approach                                     | Bot detection risk | Best for                                            |
 | -------------------------------------------- | ------------------ | --------------------------------------------------- |
-| Regular Playwright                           | Moderate           | Simple DOM extraction, server-rendered sites        |
+| Regular Playwright                           | Low-Moderate       | Simple DOM extraction, server-rendered sites        |
 | Passive interception (`page.on('response')`) | Low                | SPAs that load data via API calls during navigation |
 | In-browser fetch (`pageRequest()`)           | Low to moderate    | Deep pagination, bulk queries without UI clicking   |
 | Direct HTTP from Node.js                     | Very high          | Public/documented APIs with no bot detection        |
@@ -59,7 +59,7 @@ Libretto supports four distinct approaches to capturing data and automating web 
     * Harder to get structured data because you're scraping rendered HTML rather than clean API responses
     * Cannot access data that isn't rendered in the DOM (e.g., API responses with fields the UI doesn't display)
 
-    **Bot detection risk: MODERATE**
+    **Bot detection risk: LOW-MODERATE**
 
     Plain Playwright is detectable by browser fingerprinting (Layer 1). Sites with any enterprise bot protection will likely flag it. Sites without active detection won't notice.
 
@@ -190,7 +190,7 @@ Libretto supports four distinct approaches to capturing data and automating web 
 
 | Criteria                           | Regular Playwright      | Passive interception         | In-browser fetch        | Direct HTTP             |
 | ---------------------------------- | ----------------------- | ---------------------------- | ----------------------- | ----------------------- |
-| **Bot detection risk**             | Moderate                | Low                          | Low–Moderate            | Very High               |
+| **Bot detection risk**             | Low-Moderate            | Low                          | Low–Moderate            | Very High               |
 | **Browser fingerprint risk**       | Yes                     | Yes                          | Yes                     | N/A (wrong fingerprint) |
 | **Network fingerprint risk**       | None (browser requests) | None (browser requests)      | None (browser requests) | Very High               |
 | **API monitoring risk**            | None                    | None                         | Low (fetch patching)    | N/A                     |
