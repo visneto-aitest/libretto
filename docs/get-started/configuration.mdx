@@ -2,26 +2,13 @@
 title: Configuration
 ---
 
-> Set up Libretto and configure your AI provider.
+> Change your AI provider, viewport, or other settings after initial setup.
 
-### Setup
+`npm init libretto@latest` handles all initial configuration for you. The commands on this page are for changing settings after the fact.
 
-Run this in your project directory to install Libretto and configure everything:
+### Changing your AI provider
 
-```bash theme={null}
-npm init libretto@latest
-```
-
-This walks you through:
-1. Installing the `libretto` package
-2. Creating the `.libretto/` directory
-3. Copying agent skill files into your project
-4. Configuring an AI provider for snapshot analysis
-5. Downloading Chromium (if not already installed)
-
-### AI provider
-
-Set your snapshot analysis model:
+If you want to switch to a different model or provider after setup:
 
 ```bash theme={null}
 npx libretto ai configure <openai|anthropic|gemini|vertex>
@@ -50,7 +37,7 @@ To view the current configuration, run `npx libretto ai configure` with no argum
 
 ### Config file reference
 
-**Location:** `.libretto/config.json`
+The config file is at `.libretto/config.json`. You can edit it directly or use the CLI commands above.
 
 ```json theme={null}
 {
