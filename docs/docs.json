@@ -73,7 +73,7 @@
           "cli-reference/snapshot",
           "cli-reference/exec",
           "cli-reference/run-and-resume",
-          "cli-reference/network-and-actions",
+          "cli-reference/session-logs",
           "cli-reference/pages"
         ]
       },
