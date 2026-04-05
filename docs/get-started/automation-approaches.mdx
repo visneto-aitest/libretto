@@ -15,10 +15,6 @@ Libretto supports four distinct approaches to capturing data and automating web 
 | In-browser fetch (`pageRequest()`)           | Low-Moderate    | Deep pagination, bulk queries without UI clicking   |
 | Direct HTTP from Node.js                     | Very high          | Public/documented APIs with no bot detection        |
 
-<Tip>
-  **Recommended approach:** Use in-browser fetch (`pageRequest()`) for most sites. For high-security sites with aggressive bot detection, combine Regular Playwright navigation with passive `page.on('response')` interception instead.
-</Tip>
-
 ***
 
 ### Approach details
@@ -183,25 +179,6 @@ Libretto supports four distinct approaches to capturing data and automating web 
     </Warning>
   </Tab>
 </Tabs>
-
-***
-
-### Comparison matrix
-
-| Criteria                           | Regular Playwright      | Passive interception         | In-browser fetch        | Direct HTTP             |
-| ---------------------------------- | ----------------------- | ---------------------------- | ----------------------- | ----------------------- |
-| **Bot detection risk**             | Low-Moderate            | Low                          | Low-Moderate            | Very High               |
-| **Browser fingerprint risk**       | Yes                     | Yes                          | Yes                     | N/A (wrong fingerprint) |
-| **Network fingerprint risk**       | None (browser requests) | None (browser requests)      | None (browser requests) | Very High               |
-| **API monitoring risk**            | None                    | None                         | Low (fetch patching)    | N/A                     |
-| **Data quality**                   | DOM-dependent           | Structured JSON              | Structured JSON         | Structured JSON         |
-| **Setup complexity**               | Low                     | Medium                       | Medium–High             | Low–Medium              |
-| **API reverse-engineering needed** | No                      | Partial (identify endpoints) | Yes (full)              | Yes (full)              |
-| **Control over data fetching**     | Low                     | Low                          | High                    | High                    |
-| **Speed**                          | Slow                    | Medium                       | Medium–Fast             | Fast                    |
-| **Resource usage**                 | High                    | High                         | High                    | Low                     |
-| **Resilience to DOM changes**      | Low                     | High                         | High                    | High                    |
-| **Resilience to API changes**      | Medium                  | Low                          | Low                     | Low                     |
 
 ***
 
