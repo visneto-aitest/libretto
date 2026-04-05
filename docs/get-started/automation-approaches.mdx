@@ -207,6 +207,12 @@ Libretto supports four distinct approaches to capturing data and automating web 
 
 ### Decision guide
 
+<Tip>
+  **Recommended approach:** Use in-browser fetch (`pageRequest()`) for most sites. It gives you full control over which endpoints you call, structured JSON responses, and the real browser's network fingerprint.
+
+  For high-security sites with aggressive bot detection (Cloudflare, Akamai, PerimeterX), use Regular Playwright for navigation and passive `page.on('response')` interception for data capture. This avoids making any extra requests that could trigger detection.
+</Tip>
+
 **Use Regular Playwright when:**
 
 * The data you need is visible in the DOM and straightforward to extract with selectors
@@ -237,16 +243,6 @@ Libretto supports four distinct approaches to capturing data and automating web 
 
 ***
 
-### Recommended approach
-
-<Tip>
-  Use in-browser fetch (`pageRequest()`) for most sites. It gives you full control over which endpoints you call, structured JSON responses, and the real browser's network fingerprint.
-
-  For high-security sites with aggressive bot detection (Cloudflare, Akamai, PerimeterX), use Regular Playwright for navigation and passive `page.on('response')` interception for data capture. This avoids making any extra requests that could trigger detection.
-</Tip>
-
-***
-
 ### Bot detection
 
 <Warning>
@@ -256,14 +252,13 @@ Libretto supports four distinct approaches to capturing data and automating web 
   automating against any site you don't control.
 </Warning>
 
-#### What Libretto does automatically
+#### How Libretto helps you assess bot detection
 
-Libretto applies two baseline stealth measures when launching a browser:
+Libretto captures all network traffic and page state during a session, which lets you (or your agent) check what bot detection measures a site uses before committing to an automation approach:
 
-- **Suppresses the automation flag:** Disables Chrome's `AutomationControlled` blink feature so `navigator.webdriver` is not set to `true`.
-- **Sets a real User-Agent:** Overrides the default Playwright user-agent with a standard Chrome user-agent string.
-
-These measures help with sites that only perform basic automation checks. They are not sufficient for sites with enterprise bot protection (Cloudflare, Akamai, PerimeterX, DataDome, etc.).
+- **Network log inspection.** Use `npx libretto network` to review all requests and responses. Look for calls to bot detection services (Cloudflare, Akamai, PerimeterX, DataDome) or challenge endpoints.
+- **Fetch patching check.** Run `npx libretto exec` to evaluate `window.fetch.toString()` in the browser console. If it returns actual JavaScript (not `"[native code]"`), the site monkey-patches fetch and you should prefer passive interception over in-browser fetch.
+- **Snapshot analysis.** Use `npx libretto snapshot` to check for challenge pages, CAPTCHAs, or interstitials that indicate detection.
 
 #### Signs your automation is being detected
 
@@ -280,4 +275,3 @@ Watch for these during development:
 - **Add realistic delays.** Use `page.type()` with variable delays instead of `page.fill()`. Pause between actions like a human would.
 - **Reuse authenticated profiles.** Use `libretto save` to persist session state. Logging in every run is more suspicious than reusing a saved session.
 - **Avoid cloud IPs.** Requests from AWS/GCP/Azure IP ranges face higher scrutiny. Run from a residential IP when possible.
-- **Check for fetch patching.** Before using `pageRequest()`, open the browser console and run `window.fetch.toString()`. If it returns actual JavaScript (not `"[native code]"`), the site monitors fetch calls. Prefer passive interception instead.
