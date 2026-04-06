@@ -80,7 +80,7 @@ The `connect` command attaches to an existing Chrome DevTools Protocol (CDP) end
 
 ```bash theme={null}
 npx libretto connect http://127.0.0.1:9222 --session my-session
-npx libretto connect http://127.0.0.1:9223 --session another-session
+npx libretto connect ws://127.0.0.1:9223 --session another-session
 ```
 
 #### When to use `connect`
@@ -92,7 +92,7 @@ npx libretto connect http://127.0.0.1:9223 --session another-session
 #### Flags
 
 <ParamField path="cdp-url" type="string" required>
-  The CDP endpoint URL to connect to. Passed as the first positional argument.
+  The CDP endpoint URL to connect to. This can be either an HTTP or WebSocket URL and is passed as the first positional argument.
   Example: `http://127.0.0.1:9222`.
 </ParamField>
 
