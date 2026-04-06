@@ -66,6 +66,14 @@ npx libretto run <file> <workflowName> [flags]
   Disable ghost cursor and element highlight visualization in headed mode.
 </ParamField>
 
+<Info>
+  **Cloud browser providers:** The `run` command does not yet support the
+  `--provider` flag. Workflows always run against a local browser. Cloud
+  provider support for `run` is planned — see [open &
+  connect](/cli-reference/open-and-connect#cloud-browser-providers) for the
+  current provider support on `open`.
+</Info>
+
 #### Behavior on failure
 
 When a workflow fails, Libretto keeps the browser open at the point of failure. You can then use `snapshot` and `exec` to inspect the live page state before editing the workflow code.
