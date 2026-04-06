@@ -36,7 +36,7 @@ Sessions and profiles are automatically git-ignored by a `.libretto/.gitignore` 
 
 ### Sessions
 
-A **session** is a named browser context. When you run `npx libretto open https://example.com --session my-session`, Libretto launches a Chromium instance and registers it under that name. Subsequent commands (`snapshot`, `exec`, `network`, `actions`) all target that session by name.
+A **session** is a named browser context. When you run `npx libretto open https://example.com --session my-session`, Libretto launches a Chromium instance and registers it under that name. Subsequent commands (`snapshot`, `exec`, `pages`) all target that session by name.
 
 Sessions are created automatically when you run `open`, `connect`, or `run`, and cleaned up with `npx libretto close`.
 
