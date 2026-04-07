@@ -240,6 +240,7 @@ async function runIntegrationInternal(
     viewport: args.viewport,
     accessMode: args.accessMode,
     cdpEndpoint: args.cdpEndpoint,
+    provider: args.provider,
   });
   if (!args.headless && args.visualize !== false) {
     await installHeadedWorkflowVisualization({

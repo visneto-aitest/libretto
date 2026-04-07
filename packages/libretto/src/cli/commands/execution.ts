@@ -632,6 +632,7 @@ async function runIntegrationFromFile(
     viewport: args.viewport,
     accessMode: args.accessMode,
     cdpEndpoint: args.cdpEndpoint,
+    provider: args.provider,
   } satisfies RunIntegrationWorkerRequest);
   const worker = spawn(
     process.execPath,
@@ -873,31 +874,52 @@ export const runCommand = SimpleCLI.command({
 
     const providerName = resolveProviderName(input.provider);
     let cdpEndpoint: string | undefined;
+    let providerInfo: { name: string; sessionId: string } | undefined;
+    let provider: ReturnType<typeof getCloudProviderApi> | undefined;
     if (providerName !== "local") {
-      const provider = getCloudProviderApi(providerName);
+      provider = getCloudProviderApi(providerName);
       console.log(
         `Creating ${providerName} browser session (session: ${ctx.session})...`,
       );
       const providerSession = await provider.createSession();
       console.log(`Connecting to ${providerName} browser...`);
       cdpEndpoint = providerSession.cdpEndpoint;
+      providerInfo = {
+        name: providerName,
+        sessionId: providerSession.sessionId,
+      };
     }
 
-    await runIntegrationFromFile(
-      {
-        integrationPath: input.integrationFile!,
-        session: ctx.session,
-        params,
-        tsconfigPath: input.tsconfig,
-        headless: cdpEndpoint ? true : (headlessMode ?? false),
-        visualize,
-        authProfileDomain: input.authProfile,
-        viewport,
-        accessMode: input.readOnly ? "read-only" : input.writeAccess ? "write-access" : (readLibrettoConfig().sessionMode ?? "write-access"),
-        cdpEndpoint,
-      },
-      ctx.logger,
-    );
+    try {
+      await runIntegrationFromFile(
+        {
+          integrationPath: input.integrationFile!,
+          session: ctx.session,
+          params,
+          tsconfigPath: input.tsconfig,
+          headless: cdpEndpoint ? true : (headlessMode ?? false),
+          visualize,
+          authProfileDomain: input.authProfile,
+          viewport,
+          accessMode: input.readOnly ? "read-only" : input.writeAccess ? "write-access" : (readLibrettoConfig().sessionMode ?? "write-access"),
+          cdpEndpoint,
+          provider: providerInfo,
+        },
+        ctx.logger,
+      );
+    } catch (err) {
+      if (provider && providerInfo) {
+        try {
+          await provider.closeSession(providerInfo.sessionId);
+        } catch (cleanupErr) {
+          console.error(
+            `Failed to clean up ${providerInfo.name} session ${providerInfo.sessionId}:`,
+            cleanupErr instanceof Error ? cleanupErr.message : cleanupErr,
+          );
+        }
+      }
+      throw err;
+    }
   });
 
 export const resumeInput = SimpleCLI.input({

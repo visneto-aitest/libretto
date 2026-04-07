@@ -37,6 +37,7 @@ export type LaunchBrowserArgs = {
   storageStatePath?: string;
   accessMode?: SessionAccessMode;
   cdpEndpoint?: string;
+  provider?: { name: string; sessionId: string };
 };
 
 export type BrowserSession = {
@@ -102,6 +103,7 @@ export async function launchBrowser({
   storageStatePath,
   accessMode = "write-access",
   cdpEndpoint,
+  provider,
 }: LaunchBrowserArgs): Promise<BrowserSession> {
   // Cloud/remote mode: connect to an existing CDP endpoint instead of launching locally
   if (cdpEndpoint) {
@@ -125,6 +127,7 @@ export async function launchBrowser({
           startedAt: new Date().toISOString(),
           status: "active",
           mode: accessMode,
+          ...(provider ? { provider } : {}),
         },
         null,
         2,
