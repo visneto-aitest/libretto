@@ -42,6 +42,7 @@ export const LibrettoConfigSchema = z
     ai: AiConfigSchema.optional(),
     viewport: ViewportConfigSchema.optional(),
     windowPosition: WindowPositionConfigSchema.optional(),
+    provider: z.string().optional(),
     sessionMode: SessionAccessModeSchema.optional(),
   })
   .passthrough();

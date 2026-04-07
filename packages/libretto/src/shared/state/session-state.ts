@@ -8,11 +8,17 @@ export const SessionStatusSchema = z.enum([
   "completed",
   "failed",
   "exited",
+  "cleanup-failed",
 ]);
 export const SessionAccessModeSchema = z.enum(["read-only", "write-access"]);
 export const SessionViewportSchema = z.object({
   width: z.number().int().min(1),
   height: z.number().int().min(1),
+});
+
+export const ProviderStateSchema = z.object({
+  name: z.string(),
+  sessionId: z.string(),
 });
 
 export const SessionStateFileSchema = z.object({
@@ -25,6 +31,7 @@ export const SessionStateFileSchema = z.object({
   status: SessionStatusSchema.optional(),
   mode: SessionAccessModeSchema.default("write-access"),
   viewport: SessionViewportSchema.optional(),
+  provider: ProviderStateSchema.optional(),
 });
 
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;

@@ -5,9 +5,14 @@ import {
   runCloseAll as runCloseAllWithLogger,
   runConnect as runConnectWithLogger,
   runOpen,
+  runOpenWithProvider,
   runPages,
   runSave,
 } from "../core/browser.js";
+import {
+  resolveProviderName,
+  getCloudProviderApi,
+} from "../core/providers/index.js";
 import { readLibrettoConfig } from "../core/config.js";
 import { createLoggerForSession, withSessionLogger } from "../core/context.js";
 import {
@@ -47,7 +52,10 @@ export function parseViewportArg(
   return { width, height };
 }
 
-function resolveRequestedSessionMode(readOnly: boolean | undefined, writeAccess: boolean | undefined): SessionAccessMode {
+function resolveRequestedSessionMode(
+  readOnly: boolean | undefined,
+  writeAccess: boolean | undefined,
+): SessionAccessMode {
   if (readOnly) return "read-only";
   if (writeAccess) return "write-access";
   const config = readLibrettoConfig();
@@ -75,6 +83,10 @@ export const openInput = SimpleCLI.input({
     viewport: SimpleCLI.option(z.string().optional(), {
       help: "Viewport size as WIDTHxHEIGHT (e.g. 1920x1080)",
     }),
+    provider: SimpleCLI.option(z.string().optional(), {
+      help: "Browser provider (local, kernel, browserbase)",
+      aliases: ["-p"],
+    }),
   },
 })
   .refine(
@@ -98,12 +110,28 @@ export const openCommand = SimpleCLI.command({
   .handle(async ({ input, ctx }) => {
     warnIfInstalledSkillOutOfDate();
     assertSessionAvailableForStart(ctx.session, ctx.logger);
-    const headed = input.headed || !input.headless;
-    const viewport = parseViewportArg(input.viewport);
-    await runOpen(input.url!, headed, ctx.session, ctx.logger, {
-      viewport,
-      accessMode: resolveRequestedSessionMode(input.readOnly, input.writeAccess),
-    });
+    const providerName = resolveProviderName(input.provider);
+    if (providerName === "local") {
+      const headed = input.headed || !input.headless;
+      const viewport = parseViewportArg(input.viewport);
+      await runOpen(input.url!, headed, ctx.session, ctx.logger, {
+        viewport,
+        accessMode: resolveRequestedSessionMode(
+          input.readOnly,
+          input.writeAccess,
+        ),
+      });
+    } else {
+      const provider = getCloudProviderApi(providerName);
+      await runOpenWithProvider(
+        input.url!,
+        providerName,
+        provider,
+        ctx.session,
+        ctx.logger,
+        resolveRequestedSessionMode(input.readOnly, input.writeAccess),
+      );
+    }
   });
 
 export const connectInput = SimpleCLI.input({

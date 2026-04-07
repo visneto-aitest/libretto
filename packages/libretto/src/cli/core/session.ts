@@ -129,6 +129,10 @@ export function listRunningSessions(): SessionState[] {
   for (const name of sessions) {
     const state = readSessionState(name);
     if (!state) continue;
+    if (state.provider) {
+      running.push(state);
+      continue;
+    }
     if (state.pid == null || !isPidRunning(state.pid)) continue;
     running.push(state);
   }
@@ -272,6 +276,15 @@ export function assertSessionAvailableForStart(
 ): void {
   const existingState = readSessionState(session, logger);
   if (!existingState) return;
+
+  // Cloud provider sessions have no local PID — treat them as active
+  // if they have a provider field with a cdpEndpoint.
+  if (existingState.provider && existingState.cdpEndpoint) {
+    throw new Error(
+      `Session "${session}" is already open via ${existingState.provider.name} provider. Close it first with: libretto close --session ${session}`,
+    );
+  }
+
   if (existingState.pid == null || !isPidRunning(existingState.pid)) {
     setSessionStatus(session, "exited", logger);
     return;

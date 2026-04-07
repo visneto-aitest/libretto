@@ -37,6 +37,8 @@ import {
   readSessionState,
   writeSessionState,
 } from "./session.js";
+import type { ProviderApi } from "./providers/types.js";
+import { getCloudProviderApi } from "./providers/index.js";
 import { installSessionTelemetry } from "./session-telemetry.js";
 
 const CLOSE_WAIT_MS = 1_500;
@@ -258,6 +260,16 @@ export async function connect(
       endpoint,
       pid: state.pid,
     });
+    // Provider sessions have no local PID to check liveness.
+    // Don't destroy the remote session on a transient failure —
+    // let the user retry or explicitly close.
+    if (state.provider) {
+      throw new Error(
+        `Could not connect to ${state.provider.name} session for "${session}" at ${endpoint}. ` +
+          `The remote session may still be active. Try again, or close with: libretto close --session ${session}`,
+      );
+    }
+
     if (state.pid == null || !isPidRunning(state.pid)) {
       clearSessionState(session, logger);
       throw new Error(
@@ -717,6 +729,106 @@ await new Promise(() => {});
   );
 }
 
+export async function runOpenWithProvider(
+  rawUrl: string,
+  providerName: string,
+  provider: ProviderApi,
+  session: string,
+  logger: LoggerApi,
+  accessMode: SessionAccessMode = "write-access",
+): Promise<void> {
+  const parsedUrl = normalizeUrl(rawUrl);
+  const url = parsedUrl.href;
+  logger.info("open-provider-start", { url, provider: providerName, session });
+
+  console.log(
+    `Creating ${providerName} browser session (session: ${session})...`,
+  );
+
+  const providerSession = await provider.createSession();
+  logger.info("open-provider-session-created", {
+    provider: providerName,
+    sessionId: providerSession.sessionId,
+    cdpEndpoint: providerSession.cdpEndpoint,
+  });
+
+  console.log(`Connecting to ${providerName} browser...`);
+
+  let browser: Browser | null = null;
+  try {
+    browser = await tryConnectToCDP(
+      providerSession.cdpEndpoint,
+      logger,
+      30_000,
+    );
+    if (!browser) {
+      throw new Error(
+        `Could not connect to ${providerName} browser at ${providerSession.cdpEndpoint}. The remote session was created but CDP connection failed.`,
+      );
+    }
+
+    const contexts = browser.contexts();
+    let page: Page;
+    if (contexts.length > 0 && contexts[0].pages().length > 0) {
+      page = contexts[0].pages()[0];
+    } else {
+      const context =
+        contexts.length > 0 ? contexts[0] : await browser.newContext();
+      page = await context.newPage();
+    }
+
+    await page.goto(url);
+    logger.info("open-provider-navigated", { url, session });
+
+    // Cloud sessions have no local port. Reconnection uses cdpEndpoint directly.
+    writeSessionState(
+      {
+        port: 0,
+        cdpEndpoint: providerSession.cdpEndpoint,
+        session,
+        startedAt: new Date().toISOString(),
+        status: "active",
+        mode: accessMode,
+        provider: {
+          name: providerName,
+          sessionId: providerSession.sessionId,
+        },
+      },
+      logger,
+    );
+
+    disconnectBrowser(browser, logger, session);
+  } catch (err) {
+    if (browser) {
+      disconnectBrowser(browser, logger, session);
+    }
+    // Clean up the remote session so it doesn't leak
+    logger.warn("open-provider-cleanup-after-error", {
+      provider: providerName,
+      sessionId: providerSession.sessionId,
+      error: err,
+    });
+    try {
+      await provider.closeSession(providerSession.sessionId);
+    } catch (cleanupErr) {
+      logger.warn("open-provider-cleanup-failed", {
+        provider: providerName,
+        sessionId: providerSession.sessionId,
+        error: cleanupErr,
+      });
+    }
+    throw err;
+  }
+
+  logger.info("open-provider-success", {
+    url,
+    provider: providerName,
+    session,
+    sessionId: providerSession.sessionId,
+  });
+  console.log(`Browser open (${providerName}): ${url}`);
+}
+
 export async function runSave(
   urlOrDomain: string,
   session: string,
@@ -811,11 +923,37 @@ export async function runClose(
     return;
   }
 
-  logger.info("close-killing", { session, pid: state.pid, port: state.port });
-
-  if (state.pid != null) {
-    sendSignalToProcessGroupOrPid(state.pid, "SIGTERM", logger, session);
-    await waitForCloseSignalWindow(CLOSE_WAIT_MS);
+  if (state.provider) {
+    // Cloud provider session — close via provider API, no local pid to kill
+    logger.info("close-provider", {
+      session,
+      provider: state.provider.name,
+      sessionId: state.provider.sessionId,
+    });
+    try {
+      const provider = getCloudProviderApi(state.provider.name);
+      await provider.closeSession(state.provider.sessionId);
+    } catch (err) {
+      logger.warn("close-provider-error", {
+        session,
+        provider: state.provider.name,
+        sessionId: state.provider.sessionId,
+        error: err,
+      });
+      // Preserve state with cleanup-failed status so the user can retry.
+      // The provider.sessionId is retained for manual or future cleanup.
+      writeSessionState({ ...state, status: "cleanup-failed" }, logger);
+      throw new Error(
+        `Failed to close remote ${state.provider.name} session "${state.provider.sessionId}" for session "${session}". ` +
+          `State preserved with status "cleanup-failed". Retry with: libretto close --session ${session}`,
+      );
+    }
+  } else {
+    logger.info("close-killing", { session, pid: state.pid, port: state.port });
+    if (state.pid != null) {
+      sendSignalToProcessGroupOrPid(state.pid, "SIGTERM", logger, session);
+      await waitForCloseSignalWindow(CLOSE_WAIT_MS);
+    }
   }
 
   clearSessionState(session, logger);
@@ -827,6 +965,7 @@ type ClosableSession = {
   session: string;
   pid?: number;
   port: number;
+  provider?: { name: string; sessionId: string };
 };
 
 function waitForCloseSignalWindow(ms: number): Promise<void> {
@@ -879,6 +1018,7 @@ function resolveClosableSessions(logger: LoggerApi): {
       session,
       pid: state.pid,
       port: state.port,
+      provider: state.provider,
     });
   }
 
@@ -888,9 +1028,11 @@ function resolveClosableSessions(logger: LoggerApi): {
 function clearStoppedSessionStates(
   sessions: ReadonlyArray<ClosableSession>,
   logger: LoggerApi,
+  skip?: ReadonlySet<string>,
 ): number {
   let cleared = 0;
   for (const session of sessions) {
+    if (skip?.has(session.session)) continue;
     if (session.pid == null || !isPidRunning(session.pid)) {
       clearSessionState(session.session, logger);
       cleared += 1;
@@ -916,7 +1058,38 @@ export async function runCloseAll(
     return;
   }
 
+  // Close provider sessions via their APIs
+  const failedProviderSessions = new Set<string>();
   for (const target of closable) {
+    if (target.provider) {
+      logger.info("close-all-provider", {
+        session: target.session,
+        provider: target.provider.name,
+        sessionId: target.provider.sessionId,
+      });
+      try {
+        const provider = getCloudProviderApi(target.provider.name);
+        await provider.closeSession(target.provider.sessionId);
+      } catch (err) {
+        logger.warn("close-all-provider-error", {
+          session: target.session,
+          provider: target.provider.name,
+          sessionId: target.provider.sessionId,
+          error: err,
+        });
+        failedProviderSessions.add(target.session);
+        // Mark as cleanup-failed, preserving provider.sessionId for retry
+        const state = readSessionState(target.session, logger);
+        if (state) {
+          writeSessionState({ ...state, status: "cleanup-failed" }, logger);
+        }
+      }
+    }
+  }
+
+  // Send SIGTERM to local sessions
+  for (const target of closable) {
+    if (target.provider) continue; // already handled above
     logger.info("close-all-sigterm", {
       session: target.session,
       pid: target.pid,
@@ -938,7 +1111,11 @@ export async function runCloseAll(
     (target) => target.pid != null && isPidRunning(target.pid),
   );
   if (survivors.length > 0 && !force) {
-    const closed = clearStoppedSessionStates(closable, logger);
+    const closed = clearStoppedSessionStates(
+      closable,
+      logger,
+      failedProviderSessions,
+    );
 
     throw new Error(
       [
@@ -971,7 +1148,11 @@ export async function runCloseAll(
       (target) => target.pid != null && isPidRunning(target.pid),
     );
     if (survivors.length > 0) {
-      const closed = clearStoppedSessionStates(closable, logger);
+      const closed = clearStoppedSessionStates(
+        closable,
+        logger,
+        failedProviderSessions,
+      );
       throw new Error(
         [
           `Failed to force-close ${survivors.length} session(s): ${formatSessionList(survivors)}.`,
@@ -981,14 +1162,21 @@ export async function runCloseAll(
     }
   }
 
-  clearStoppedSessionStates(closable, logger);
+  clearStoppedSessionStates(closable, logger, failedProviderSessions);
+
+  if (failedProviderSessions.size > 0) {
+    console.log(
+      `Warning: ${failedProviderSessions.size} provider session(s) failed remote cleanup and were preserved with status "cleanup-failed".`,
+    );
+  }
 
   if (clearedUnreadableStates > 0) {
     console.log(
       `Cleared ${clearedUnreadableStates} unreadable session state file(s).`,
     );
   }
-  console.log(`Closed ${closable.length} session(s).`);
+  const closedCount = closable.length - failedProviderSessions.size;
+  console.log(`Closed ${closedCount} session(s).`);
   if (forceKilled > 0) {
     console.log(`Force-killed ${forceKilled} session(s).`);
   }
