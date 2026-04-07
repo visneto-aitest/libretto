@@ -9,3 +9,4 @@
 
 - Run `pnpm sync:mirrors` after changing anything under `skills/`.
 - Run `pnpm check:mirrors` to verify that generated READMEs, skill mirrors, and skill version metadata are in sync.
+
