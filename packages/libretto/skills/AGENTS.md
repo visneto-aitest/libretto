@@ -10,12 +10,3 @@
 - Run `pnpm sync:mirrors` after changing anything under `skills/`.
 - Run `pnpm check:mirrors` to verify that generated READMEs, skill mirrors, and skill version metadata are in sync.
 
-## Releasing
-
-To bump the version and create a release PR, run from the repo root:
-
-```bash
-pnpm prepare-release [patch|minor|major]
-```
-
-Never manually edit `packages/libretto/package.json` version — this command handles the version bump, SKILL.md version updates, mirror syncing, and PR creation.
