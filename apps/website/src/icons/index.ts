@@ -1,7 +1,11 @@
+export { AWSLogo } from "./AWSLogo";
+export { BrowserbaseLogo } from "./BrowserbaseLogo";
+export { GCPLogo } from "./GCPLogo";
 export { CheckIcon } from "./CheckIcon";
 export { CopyIcon } from "./CopyIcon";
 export { DiscordIcon } from "./DiscordIcon";
 export { GitHubIcon } from "./GitHubIcon";
 export { GitHubStarIcon } from "./GitHubStarIcon";
+export { KernelLogo } from "./KernelLogo";
 export { LinkedInIcon } from "./LinkedInIcon";
 export { RefreshIcon } from "./RefreshIcon";
