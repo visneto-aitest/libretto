@@ -45,12 +45,12 @@ export function BattleTestedBanner() {
           {/* Text — left */}
           <div className="md:max-w-[440px]">
             <SectionHeading size="sm" className="mb-4">
-              Battle-tested on healthcare software
+              Battle-tested on legacy healthcare software
             </SectionHeading>
             <Text as="p" size="md" className="leading-relaxed text-muted">
-              Libretto was born out of a frustration with building browser
-              integrations at Saffron Health. It&rsquo;s been hardened against
-              the most complex, stateful web applications in healthcare.
+              Libretto was built as an internal tool for automating
+              healthcare portals where nothing else worked: shadow DOMs,
+              iframes, bot detection, and no usable APIs.
             </Text>
           </div>
 

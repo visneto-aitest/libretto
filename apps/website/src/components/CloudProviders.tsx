@@ -14,13 +14,12 @@ export function CloudProviders() {
           size="md"
           className="mx-auto mb-14 max-w-[480px] leading-relaxed text-muted"
         >
-          Works with your cloud provider. Bring your own infrastructure —
-          Libretto doesn&rsquo;t lock you in.
+          Libretto works with your existing infrastructure, no lock-in.
         </Text>
 
         <div className="mx-auto flex max-w-[700px] flex-wrap items-center justify-center gap-12 md:gap-16">
-          <KernelLogo className="h-7 w-auto text-ink/25" />
           <BrowserbaseLogo className="h-8 w-auto text-ink/25" />
+          <KernelLogo className="h-7 w-auto text-ink/25" />
           <AWSLogo className="h-8 w-auto text-ink/25" />
           <GCPLogo className="h-8 w-auto text-ink/25" />
         </div>

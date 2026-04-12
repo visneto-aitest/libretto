@@ -117,21 +117,21 @@ interface MaintainFeature {
 
 const features: MaintainFeature[] = [
   {
-    title: "No non-determinism",
+    title: "Deterministic failures",
     description:
-      "You're not rerunning expensive API calls, slowing down your actions, and increasing costs. Everything lives as code — when it fails, your coding agent spins up to inspect the page and resolve the fix.",
+      "Runtime agents introduce nondeterminism that makes failures hard to reproduce. Libretto generates deterministic code, so failures are repeatable and easy to fix.",
     icon: <MergeIcon className="text-ink/40" />,
   },
   {
-    title: "Make debugging easy for agents",
+    title: "Agent-friendly debugging",
     description:
-      "When something breaks, the agent reruns the workflow and inserts pause statements to step through and debug the failure — just like a developer would.",
+      "When something breaks, the agent reruns the workflow and inserts pause statements to step through and debug the failure, just like a developer would.",
     icon: <LayersIcon className="text-ink/40" />,
   },
   {
     title: "Read-only mode for sensitive workflows",
     description:
-      "Restrict the agent's access so it can only observe the page. It won't fill out incorrect information or submit something unexpected.",
+      "Enable read-only mode to restrict the agent to only observing the page. It won't fill out incorrect information or submit something unexpected.",
     icon: <LogInIcon className="text-ink/40" />,
   },
 ];
@@ -142,14 +142,16 @@ export function MaintainingFeatures() {
       <div className="mx-auto max-w-[1000px]">
         <div className="mb-16 text-center">
           <SectionHeading className="mb-4">
-            Maintaining automations
+            Effortless debugging
           </SectionHeading>
           <Text
             as="p"
             size="md"
             className="mx-auto max-w-[520px] leading-relaxed text-muted"
           >
-            Automations break. Libretto makes sure they&rsquo;re easy to fix.
+            Browser automations inevitably hit unexpected edge cases, from UI
+            changes to unanticipated site behavior. Libretto makes them easy to
+            diagnose and fast to fix.
           </Text>
         </div>
 
