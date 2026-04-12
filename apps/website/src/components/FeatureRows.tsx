@@ -11,19 +11,19 @@ const features: Feature[] = [
   {
     title: "Record user actions",
     description:
-      "Watch and record real browser interactions, then replay them as deterministic automation scripts. No manual scripting needed.",
+      "Libretto turns your browser actions and plain-language instructions into deterministic automation scripts.",
     gifPlaceholder: "Recording user actions",
   },
   {
-    title: "Multiple integration approaches",
+    title: "Smart integration selection",
     description:
-      "Choose the right strategy for every site — from full browser automation to lightweight network-level integrations depending on security requirements.",
+      "Libretto analyzes each site's security and structure to determine the right integration approach, combining browser automation with direct API requests.",
     gifPlaceholder: "Scanning integration approaches",
   },
   {
-    title: "Lives in your repo",
+    title: "Native to your codebase",
     description:
-      "Workflows are plain TypeScript files that live alongside your application code. Version them, review them, and deploy them like everything else.",
+      "Libretto generates deterministic TypeScript that follows your existing abstractions and lives alongside your application code.",
     gifPlaceholder: "File tree with workflows",
   },
 ];
