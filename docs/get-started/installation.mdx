@@ -30,6 +30,17 @@ Use this if you want Libretto to scaffold a new package with directory structure
 
   </Step>
 
+  <Step title="Set your API key">
+    Libretto uses an AI model to analyze page snapshots during workflow generation. Add the API key for your chosen provider to a `.env` file in your project root:
+
+    ```bash theme={null}
+    # .env
+    OPENAI_API_KEY=sk-...
+    ```
+
+    See the [AI Provider Reference](/get-started/configuration#ai-provider-reference) for the full list of supported providers and their environment variables.
+  </Step>
+
   <Step title="Run a workflow">
     The scaffolded package includes an example workflow. Run it with:
 
@@ -63,6 +74,17 @@ If you already have a Node.js package that you plan to use for Libretto automati
       input and starts a Chromium download that takes a moment.
     </Note>
 
+  </Step>
+
+  <Step title="Set your API key">
+    Libretto uses an AI model to analyze page snapshots during workflow generation. Add the API key for your chosen provider to a `.env` file in your project root:
+
+    ```bash theme={null}
+    # .env
+    OPENAI_API_KEY=sk-...
+    ```
+
+    See the [AI Provider Reference](/get-started/configuration#ai-provider-reference) for the full list of supported providers and their environment variables.
   </Step>
 
   <Step title="Create a workflow">

@@ -1,5 +1,3 @@
-import { writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import type { Page, Download } from "playwright";
 import type { MinimalLogger } from "../../shared/logger/logger.js";
 
@@ -70,35 +68,3 @@ export async function downloadViaClick(
   return { buffer, filename };
 }
 
-export type SaveDownloadOptions = DownloadViaClickOptions & {
-  /** Absolute or relative path to save the file to. When omitted the suggested filename is used in the current working directory. */
-  savePath?: string;
-};
-
-/**
- * Convenience wrapper around {@link downloadViaClick} that also writes the
- * downloaded file to disk.
- */
-export async function downloadAndSave(
-  page: Page,
-  selector: string,
-  options?: SaveDownloadOptions,
-): Promise<DownloadResult & { savedTo: string }> {
-  const { savePath, ...downloadOpts } = options ?? {};
-  const { buffer, filename } = await downloadViaClick(
-    page,
-    selector,
-    downloadOpts,
-  );
-
-  const dest = resolve(savePath ?? filename);
-  await writeFile(dest, buffer);
-
-  options?.logger?.info("download:saved", {
-    filename,
-    savedTo: dest,
-    size: buffer.length,
-  });
-
-  return { buffer, filename, savedTo: dest };
-}

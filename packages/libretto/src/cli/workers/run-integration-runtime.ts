@@ -4,6 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { cwd } from "node:process";
 import { isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadProjectEnv } from "../../shared/env/load-env.js";
 import {
   getDefaultWorkflowFromModuleExports,
   getWorkflowsFromModuleExports,
@@ -194,6 +195,12 @@ async function runIntegrationInternal(
 ): Promise<RunIntegrationOutcome> {
   const { logger } = options;
   const absolutePath = getAbsoluteIntegrationPath(args.integrationPath);
+
+  const envPath = loadProjectEnv(absolutePath);
+  if (envPath) {
+    logger.info("loaded-env", { path: envPath });
+  }
+
   const workflow = await loadDefaultWorkflow(absolutePath);
   const signalPaths = getPauseSignalPaths(args.session);
   await removeSignalIfExists(signalPaths.pausedSignalPath);

@@ -84,8 +84,7 @@
           "library-api/workflow",
           "library-api/ai-extraction",
           "library-api/network-requests",
-          "library-api/downloads",
-          "library-api/error-recovery"
+          "library-api/file-downloads"
         ]
       }
     ],
