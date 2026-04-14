@@ -154,9 +154,9 @@ function ensurePinnedDefaultModel(
 ): AiSetupStatus & { kind: "ready" } {
   if (status.source !== "config") {
     writeSnapshotModel(status.model);
+    return { ...status, source: "config" as const };
   }
-  installSdkIfNeeded(status.provider);
-  return { ...status, source: "config" as const };
+  return status;
 }
 
 function printHealthySummary(status: AiSetupStatus & { kind: "ready" }): void {
