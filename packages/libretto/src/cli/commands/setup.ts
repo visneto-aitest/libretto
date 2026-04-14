@@ -22,6 +22,66 @@ import {
 import type { Provider } from "../core/resolve-model.js";
 import { SimpleCLI } from "../framework/simple-cli.js";
 
+const PROVIDER_SDK_PACKAGES: Record<Provider, string> = {
+  openai: "@ai-sdk/openai",
+  anthropic: "@ai-sdk/anthropic",
+  google: "@ai-sdk/google",
+  vertex: "@ai-sdk/google-vertex",
+};
+
+function detectPackageManager(): string {
+  if (existsSync(join(REPO_ROOT, "pnpm-lock.yaml"))) return "pnpm";
+  if (existsSync(join(REPO_ROOT, "yarn.lock"))) return "yarn";
+  if (existsSync(join(REPO_ROOT, "bun.lockb"))) return "bun";
+  return "npm";
+}
+
+function installCommand(pkgManager: string): string {
+  switch (pkgManager) {
+    case "yarn":
+      return "yarn add";
+    case "bun":
+      return "bun add";
+    case "pnpm":
+      return "pnpm add";
+    default:
+      return "npm install";
+  }
+}
+
+function isSdkInstalled(sdkPackage: string): boolean {
+  try {
+    const result = spawnSync("node", ["-e", `require.resolve("${sdkPackage}")`], {
+      cwd: REPO_ROOT,
+      stdio: "pipe",
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
+}
+
+function installSdkIfNeeded(provider: Provider): void {
+  const sdkPackage = PROVIDER_SDK_PACKAGES[provider];
+  if (isSdkInstalled(sdkPackage)) return;
+
+  const pkgManager = detectPackageManager();
+  const cmd = installCommand(pkgManager);
+  console.log(`\nInstalling ${sdkPackage}...`);
+  const result = spawnSync(cmd, [sdkPackage], {
+    cwd: REPO_ROOT,
+    stdio: "inherit",
+    shell: true,
+  });
+  if (result.status === 0) {
+    console.log(`✓ Installed ${sdkPackage}`);
+  } else {
+    console.error(
+      `✗ Failed to install ${sdkPackage}. Install it manually: ${cmd} ${sdkPackage}`,
+    );
+  }
+}
+
 export type ProviderChoice = {
   key: string;
   label: string;
@@ -94,9 +154,9 @@ function ensurePinnedDefaultModel(
 ): AiSetupStatus & { kind: "ready" } {
   if (status.source !== "config") {
     writeSnapshotModel(status.model);
-    return { ...status, source: "config" as const };
   }
-  return status;
+  installSdkIfNeeded(status.provider);
+  return { ...status, source: "config" as const };
 }
 
 function printHealthySummary(status: AiSetupStatus & { kind: "ready" }): void {
@@ -250,6 +310,7 @@ async function promptProviderSelection(
   console.log(`\n✓ ${selected.label} selected (model: ${model}).`);
   console.log(`\nAdd ${selected.envVar} to your .env file:`);
   console.log(`  ${selected.envHint}`);
+  installSdkIfNeeded(selected.provider);
   return true;
 }
 
@@ -369,6 +430,13 @@ function copySkills(): void {
   const agentDirs = detectAgentDirs(REPO_ROOT);
 
   if (agentDirs.length === 0) {
+    console.log(
+      "\n⚠ No .agents/ or .claude/ directory found. Libretto skills were not installed.",
+    );
+    console.log(
+      "  Create one of these directories in your repo root and rerun `npx libretto setup` to install skills:",
+    );
+    console.log(`    mkdir ${join(REPO_ROOT, ".claude")}`);
     return;
   }
 
