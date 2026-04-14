@@ -32,7 +32,7 @@ function parseEnvFile(content: string): Record<string, string> {
     const eqIndex = withoutExport.indexOf("=");
     if (eqIndex === -1) continue;
     const key = withoutExport.slice(0, eqIndex).trim();
-    let value = line.slice(eqIndex + 1).trim();
+    let value = withoutExport.slice(eqIndex + 1).trim();
     // Strip matching quotes
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
