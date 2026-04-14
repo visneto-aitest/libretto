@@ -13,7 +13,7 @@ One-shot generation is the fastest way to go from an idea to a working automatio
     Describe the **site**, the **data or action** you want, and the **shape of the output**. The more specific you are, the better your results.
 
     ```text Example prompt
-    Use the Libretto skill. Go on Craigslist and scrape the first 10 "free stuff" listings for title, location, and link.
+    Use the Libretto skill. Go on https://sfbay.craigslist.org and scrape the first 10 "free stuff" listings for title, location, and link.
     ```
 
     Include "Use the Libretto skill" so your agent uses Libretto's CLI tools instead of writing a Playwright script from scratch.
@@ -25,7 +25,7 @@ One-shot generation is the fastest way to go from an idea to a working automatio
 
     ```bash  theme={null}
     # What the agent runs behind the scenes
-    npx libretto open https://sfbay.craigslist.org --headed --session one-shot-flow
+    npx libretto open https://sfbay.craigslist.org --headless --session one-shot-flow
     ```
 
     <Note>
@@ -57,7 +57,7 @@ One-shot generation is the fastest way to go from an idea to a working automatio
       }>;
     };
 
-    export const freeStuff = workflow<{}, Output>(
+    export default workflow<{}, Output>(
       "freeStuff",
       async (ctx): Promise<Output> => {
         const { page } = ctx;
@@ -91,7 +91,7 @@ One-shot generation is the fastest way to go from an idea to a working automatio
 
     ```bash  theme={null}
     # What the agent runs
-    npx libretto run ./free-stuff.ts freeStuff --headless
+    npx libretto run ./free-stuff.ts --headless
     ```
 
     If the output is wrong, tell the agent what's off:

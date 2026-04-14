@@ -53,10 +53,8 @@ export {
 // Download helpers
 export {
   downloadViaClick,
-  downloadAndSave,
   type DownloadResult,
   type DownloadViaClickOptions,
-  type SaveDownloadOptions,
 } from "./runtime/download/download.js";
 
 // Debug / Pause

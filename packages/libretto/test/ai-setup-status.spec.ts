@@ -88,7 +88,7 @@ describe("resolveAiSetupStatus", () => {
     it("resolves ready from config when config and credentials match", () => {
       writeConfig({
         version: 1,
-        ai: { model: "openai/gpt-5.4", updatedAt: "2026-01-01T00:00:00.000Z" },
+        snapshotModel: "openai/gpt-5.4",
       });
       vi.stubEnv("OPENAI_API_KEY", "test-key");
       expect(resolveAiSetupStatus(configPath)).toEqual({
@@ -102,10 +102,7 @@ describe("resolveAiSetupStatus", () => {
     it("resolves ready from config for anthropic model", () => {
       writeConfig({
         version: 1,
-        ai: {
-          model: "anthropic/claude-sonnet-4-6",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
+        snapshotModel: "anthropic/claude-sonnet-4-6",
       });
       vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
       expect(resolveAiSetupStatus(configPath)).toEqual({
@@ -121,7 +118,7 @@ describe("resolveAiSetupStatus", () => {
     it("reports configured-missing-credentials when OpenAI is pinned but key is missing", () => {
       writeConfig({
         version: 1,
-        ai: { model: "openai/gpt-5.4", updatedAt: "2026-01-01T00:00:00.000Z" },
+        snapshotModel: "openai/gpt-5.4",
       });
       expect(resolveAiSetupStatus(configPath)).toEqual({
         kind: "configured-missing-credentials",
@@ -133,7 +130,7 @@ describe("resolveAiSetupStatus", () => {
     it("a pinned OpenAI model with only Anthropic credentials must NOT be reported as ready", () => {
       writeConfig({
         version: 1,
-        ai: { model: "openai/gpt-5.4", updatedAt: "2026-01-01T00:00:00.000Z" },
+        snapshotModel: "openai/gpt-5.4",
       });
       vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
       const status = resolveAiSetupStatus(configPath);
@@ -148,10 +145,7 @@ describe("resolveAiSetupStatus", () => {
     it("reports configured-missing-credentials for Anthropic model without Anthropic key", () => {
       writeConfig({
         version: 1,
-        ai: {
-          model: "anthropic/claude-sonnet-4-6",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-        },
+        snapshotModel: "anthropic/claude-sonnet-4-6",
       });
       vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
       expect(resolveAiSetupStatus(configPath)).toEqual({
@@ -183,7 +177,7 @@ describe("resolveAiSetupStatus", () => {
     it("reports invalid-config for malformed model string without slash", () => {
       writeConfig({
         version: 1,
-        ai: { model: "openai", updatedAt: "2026-01-01T00:00:00.000Z" },
+        snapshotModel: "openai",
       });
       vi.stubEnv("OPENAI_API_KEY", "test-key");
       const status = resolveAiSetupStatus(configPath);
@@ -198,7 +192,7 @@ describe("resolveAiSetupStatus", () => {
       });
     });
 
-    it("reports unconfigured when config exists without ai block and no env credentials", () => {
+    it("reports unconfigured when config exists without snapshotModel and no env credentials", () => {
       writeConfig({ version: 1 });
       expect(resolveAiSetupStatus(configPath)).toEqual({
         kind: "unconfigured",

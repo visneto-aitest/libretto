@@ -1,12 +1,14 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { type AiConfig, readAiConfig } from "./config.js";
-import { LIBRETTO_CONFIG_PATH, REPO_ROOT } from "./context.js";
+import { readSnapshotModel } from "./config.js";
+import { LIBRETTO_CONFIG_PATH } from "./context.js";
 import {
   hasProviderCredentials,
   parseModel,
   type Provider,
 } from "./resolve-model.js";
+import { loadEnv } from "../../shared/env/load-env.js";
+
+// Re-export so existing consumers (e.g. tests) don't break.
+export { parseDotEnvAssignment } from "../../shared/env/load-env.js";
 
 // ── Default models ──────────────────────────────────────────────────────────
 
@@ -112,88 +114,6 @@ function missingProviderSnapshotMessage(
   ].join(" ");
 }
 
-// ── Dotenv loading ──────────────────────────────────────────────────────────
-
-function readWorktreeEnvPath(): string | null {
-  const gitPath = join(REPO_ROOT, ".git");
-  if (!existsSync(gitPath)) return null;
-
-  try {
-    const gitPointer = readFileSync(gitPath, "utf-8").trim();
-    const match = gitPointer.match(/^gitdir:\s*(.+)$/i);
-    if (!match?.[1]) return null;
-    const worktreeGitDir = resolve(REPO_ROOT, match[1].trim());
-    const commonGitDir = resolve(worktreeGitDir, "..", "..");
-    return join(dirname(commonGitDir), ".env");
-  } catch {
-    return null;
-  }
-}
-
-export function loadSnapshotEnv(): void {
-  if (process.env.LIBRETTO_DISABLE_DOTENV?.trim() === "1") return;
-
-  const envPathCandidates = [
-    join(REPO_ROOT, ".env"),
-    readWorktreeEnvPath(),
-  ].filter((value): value is string => Boolean(value));
-
-  const envPath = envPathCandidates.find((candidate) => existsSync(candidate));
-  if (!envPath) return;
-
-  for (const line of readFileSync(envPath, "utf-8").split("\n")) {
-    const parsed = parseDotEnvAssignment(line);
-    if (!parsed) continue;
-    if (!(parsed.key in process.env)) {
-      process.env[parsed.key] = parsed.value;
-    }
-  }
-}
-
-export function parseDotEnvAssignment(
-  line: string,
-): { key: string; value: string } | null {
-  const trimmed = line.trim();
-  if (!trimmed || trimmed.startsWith("#")) return null;
-
-  const withoutExport = trimmed.startsWith("export ")
-    ? trimmed.slice("export ".length).trimStart()
-    : trimmed;
-  const eqIdx = withoutExport.indexOf("=");
-  if (eqIdx < 1) return null;
-
-  const key = withoutExport.slice(0, eqIdx).trim();
-  if (!key) return null;
-
-  const rawValue = withoutExport.slice(eqIdx + 1).trimStart();
-  if (!rawValue) {
-    return { key, value: "" };
-  }
-
-  if (rawValue.startsWith('"')) {
-    const closeIdx = rawValue.indexOf('"', 1);
-    if (closeIdx > 0) {
-      return { key, value: rawValue.slice(1, closeIdx) };
-    }
-    return { key, value: rawValue.slice(1) };
-  }
-
-  if (rawValue.startsWith("'")) {
-    const closeIdx = rawValue.indexOf("'", 1);
-    if (closeIdx > 0) {
-      return { key, value: rawValue.slice(1, closeIdx) };
-    }
-    return { key, value: rawValue.slice(1) };
-  }
-
-  const inlineCommentIndex = rawValue.search(/\s#/);
-  const value =
-    inlineCommentIndex >= 0
-      ? rawValue.slice(0, inlineCommentIndex).trimEnd()
-      : rawValue.trim();
-  return { key, value };
-}
-
 // ── Model resolution ────────────────────────────────────────────────────────
 
 function inferAutoSnapshotModel(): SnapshotApiModelSelection | null {
@@ -221,18 +141,18 @@ function inferAutoSnapshotModel(): SnapshotApiModelSelection | null {
  * Resolve which API model to use for snapshot analysis.
  *
  * Priority:
- * 1. Model from .libretto/config.json ai.model field (set via `ai configure`)
+ * 1. snapshotModel from .libretto/config.json (set via `ai configure`)
  * 2. Auto-detect from available API credentials in env
  */
 export function resolveSnapshotApiModel(
-  config: AiConfig | null = readAiConfig(),
+  snapshotModel: string | null = readSnapshotModel(),
 ): SnapshotApiModelSelection | null {
-  loadSnapshotEnv();
+  loadEnv();
 
-  if (config?.model) {
-    const { provider } = parseModel(config.model);
+  if (snapshotModel) {
+    const { provider } = parseModel(snapshotModel);
     return {
-      model: config.model,
+      model: snapshotModel,
       provider,
       source: "config",
     };
@@ -242,9 +162,9 @@ export function resolveSnapshotApiModel(
 }
 
 export function resolveSnapshotApiModelOrThrow(
-  config: AiConfig | null = readAiConfig(),
+  snapshotModel: string | null = readSnapshotModel(),
 ): SnapshotApiModelSelection {
-  const selection = resolveSnapshotApiModel(config);
+  const selection = resolveSnapshotApiModel(snapshotModel);
   if (!selection) {
     throw new SnapshotApiUnavailableError(noSnapshotApiConfiguredMessage());
   }
@@ -288,14 +208,14 @@ export type AiSetupStatus =
   | { kind: "unconfigured" };
 
 /**
- * Read AI config without throwing on invalid files.
- * Returns the config or an error message.
+ * Read snapshot model without throwing on invalid files.
+ * Returns the model string or an error message.
  */
-function readAiConfigSafely(
+function readSnapshotModelSafely(
   configPath: string,
-): { ok: true; config: AiConfig | null } | { ok: false; message: string } {
+): { ok: true; model: string | null } | { ok: false; message: string } {
   try {
-    return { ok: true, config: readAiConfig(configPath) };
+    return { ok: true, model: readSnapshotModel(configPath) };
   } catch (err) {
     return {
       ok: false,
@@ -312,25 +232,25 @@ function readAiConfigSafely(
  * that the throwing APIs collapse into errors.
  *
  * 1. If config read throws → `invalid-config`.
- * 2. If config has an `ai` block → check credentials for that provider.
- * 3. If no config or no `ai` block → auto-detect from env via existing resolver.
+ * 2. If config has a `snapshotModel` → check credentials for that provider.
+ * 3. If no `snapshotModel` → auto-detect from env via existing resolver.
  */
 export function resolveAiSetupStatus(
   configPath: string = LIBRETTO_CONFIG_PATH,
 ): AiSetupStatus {
-  loadSnapshotEnv();
+  loadEnv();
 
-  const configResult = readAiConfigSafely(configPath);
+  const result = readSnapshotModelSafely(configPath);
 
-  if (!configResult.ok) {
-    return { kind: "invalid-config", message: configResult.message };
+  if (!result.ok) {
+    return { kind: "invalid-config", message: result.message };
   }
 
-  // Config exists with an ai block — use it directly to check credentials
-  if (configResult.config) {
+  // Config has a snapshotModel — use it directly to check credentials
+  if (result.model) {
     let selection: SnapshotApiModelSelection | null;
     try {
-      selection = resolveSnapshotApiModel(configResult.config);
+      selection = resolveSnapshotApiModel(result.model);
     } catch (err) {
       return {
         kind: "invalid-config",
@@ -356,7 +276,7 @@ export function resolveAiSetupStatus(
     };
   }
 
-  // No ai config — fall back to env auto-detect via existing resolver
+  // No snapshotModel — fall back to env auto-detect via existing resolver
   const envSelection = resolveSnapshotApiModel(null);
   if (envSelection && hasProviderCredentials(envSelection.provider)) {
     return {

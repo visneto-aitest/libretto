@@ -58,7 +58,7 @@ describe("buildRepairPlan", () => {
       provider: "openai",
       model: "openai/gpt-5.4",
       envVar: "OPENAI_API_KEY",
-      choices: ["enter-matching-credential", "switch-provider", "skip"],
+      choices: ["switch-provider", "skip"],
     });
   });
 
@@ -74,7 +74,7 @@ describe("buildRepairPlan", () => {
       provider: "anthropic",
       model: "anthropic/claude-sonnet-4-6",
       envVar: "ANTHROPIC_API_KEY",
-      choices: ["enter-matching-credential", "switch-provider", "skip"],
+      choices: ["switch-provider", "skip"],
     });
   });
 
@@ -110,7 +110,7 @@ describe("buildRepairPlan integrated with resolveAiSetupStatus", () => {
   it("pinned OpenAI + missing OpenAI key + Anthropic key present → repair plan names OpenAI", () => {
     writeConfig({
       version: 1,
-      ai: { model: "openai/gpt-5.4", updatedAt: "2026-01-01T00:00:00.000Z" },
+      snapshotModel: "openai/gpt-5.4",
     });
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
@@ -123,7 +123,6 @@ describe("buildRepairPlan integrated with resolveAiSetupStatus", () => {
       expect(plan.provider).toBe("openai");
       expect(plan.envVar).toBe("OPENAI_API_KEY");
       expect(plan.model).toBe("openai/gpt-5.4");
-      expect(plan.choices).toContain("enter-matching-credential");
       expect(plan.choices).toContain("switch-provider");
     }
   });

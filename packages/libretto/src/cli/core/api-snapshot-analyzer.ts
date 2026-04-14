@@ -18,15 +18,15 @@ import {
   type InterpretResult,
   type InterpretArgs,
 } from "./snapshot-analyzer.js";
-import { readAiConfig, type AiConfig } from "./config.js";
+import { readSnapshotModel } from "./config.js";
 import { resolveSnapshotApiModelOrThrow } from "./ai-model.js";
 
 export async function runApiInterpret(
   args: InterpretArgs,
   logger: LoggerApi,
-  configuredAi: AiConfig | null = readAiConfig(),
+  snapshotModel: string | null = readSnapshotModel(),
 ): Promise<void> {
-  const selection = resolveSnapshotApiModelOrThrow(configuredAi);
+  const selection = resolveSnapshotApiModelOrThrow(snapshotModel);
 
   logger.info("api-interpret-start", {
     objective: args.objective,

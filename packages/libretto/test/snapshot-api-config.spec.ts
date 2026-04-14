@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AiConfig } from "../src/cli/core/config.js";
 import { buildInlinePromptSelection } from "../src/cli/core/snapshot-analyzer.js";
 import {
   parseDotEnvAssignment,
@@ -7,13 +6,6 @@ import {
   resolveSnapshotApiModel,
 } from "../src/cli/core/ai-model.js";
 import { LIBRETTO_CONFIG_PATH } from "../src/cli/core/context.js";
-
-function makeConfig(model: string): AiConfig {
-  return {
-    model,
-    updatedAt: new Date(0).toISOString(),
-  };
-}
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -46,9 +38,7 @@ describe("snapshot API model resolution", () => {
     clearProviderEnv();
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
-    const config = makeConfig("openai/gpt-5.4");
-
-    expect(resolveSnapshotApiModel(config)).toMatchObject({
+    expect(resolveSnapshotApiModel("openai/gpt-5.4")).toMatchObject({
       model: "openai/gpt-5.4",
       provider: "openai",
       source: "config",
@@ -60,9 +50,7 @@ describe("snapshot API model resolution", () => {
     clearProviderEnv();
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
 
-    const config = makeConfig("anthropic/claude-sonnet-4-6");
-
-    expect(resolveSnapshotApiModel(config)).toMatchObject({
+    expect(resolveSnapshotApiModel("anthropic/claude-sonnet-4-6")).toMatchObject({
       model: "anthropic/claude-sonnet-4-6",
       provider: "anthropic",
       source: "config",
@@ -132,7 +120,7 @@ describe("snapshot API model resolution", () => {
     clearProviderEnv();
 
     expect(() =>
-      resolveSnapshotApiModelOrThrow(makeConfig("openai/gpt-5.4")),
+      resolveSnapshotApiModelOrThrow("openai/gpt-5.4"),
     ).toThrowError(
       `Failed to analyze snapshot because openai is configured in ${LIBRETTO_CONFIG_PATH}, but OPENAI_API_KEY is missing. Add OPENAI_API_KEY to .env or as a shell environment variable. For more info, run \`npx libretto setup\`.`,
     );

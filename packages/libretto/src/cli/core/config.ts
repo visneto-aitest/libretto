@@ -6,24 +6,6 @@ import { LIBRETTO_CONFIG_PATH } from "./context.js";
 
 export const CURRENT_CONFIG_VERSION = 1;
 
-/**
- * AI configuration schema.
- *
- * The `model` field is a provider/model-id string (e.g. "openai/gpt-5.4",
- * "anthropic/claude-sonnet-4-6", "google/gemini-3-flash-preview", "vertex/gemini-2.5-pro").
- *
- * Legacy note: earlier versions stored a `preset` (codex|claude|gemini) and
- * `commandPrefix` (CLI args to spawn a sub-agent process). That approach has
- * been replaced by direct API calls via the Vercel AI SDK. The legacy CLI-agent
- * code is preserved in snapshot-analyzer.ts but is not wired into the snapshot
- * command.
- */
-export const AiConfigSchema = z.object({
-  model: z.string().min(1),
-  updatedAt: z.string(),
-});
-export type AiConfig = z.infer<typeof AiConfigSchema>;
-
 export const ViewportConfigSchema = z.object({
   width: z.number().int().min(1),
   height: z.number().int().min(1),
@@ -39,7 +21,7 @@ export type WindowPositionConfig = z.infer<typeof WindowPositionConfigSchema>;
 export const LibrettoConfigSchema = z
   .object({
     version: z.literal(CURRENT_CONFIG_VERSION),
-    ai: AiConfigSchema.optional(),
+    snapshotModel: z.string().min(1).optional(),
     viewport: ViewportConfigSchema.optional(),
     windowPosition: WindowPositionConfigSchema.optional(),
     provider: z.string().optional(),
@@ -58,10 +40,7 @@ function formatExpectedConfigExample(): string {
   return JSON.stringify(
     {
       version: CURRENT_CONFIG_VERSION,
-      ai: {
-        model: "openai/gpt-5.4",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
+      snapshotModel: "openai/gpt-5.4",
       viewport: {
         width: 1280,
         height: 800,
@@ -80,13 +59,13 @@ function formatExpectedConfigExample(): string {
 function invalidConfigError(configPath: string, detail?: string): Error {
   return new Error(
     [
-      `AI config is invalid at ${configPath}.`,
+      `Config is invalid at ${configPath}.`,
       detail ? `Problems:\n${detail}` : null,
       "Expected config example:",
       formatExpectedConfigExample(),
       "Notes:",
-      '  - "ai", "viewport", "windowPosition", and "sessionMode" are optional.',
-      '  - "ai.model" must be a provider/model string like "openai/gpt-5.4" or "anthropic/claude-sonnet-4-6".',
+      '  - "snapshotModel", "viewport", "windowPosition", and "sessionMode" are optional.',
+      '  - "snapshotModel" must be a provider/model string like "openai/gpt-5.4" or "anthropic/claude-sonnet-4-6".',
       "Fix the file to match this shape, or delete it and rerun:",
       `  npx libretto ai configure openai | anthropic | gemini | vertex`,
     ]
@@ -132,16 +111,16 @@ export function writeLibrettoConfig(
   return parsed;
 }
 
-export function readAiConfig(
+export function readSnapshotModel(
   configPath: string = LIBRETTO_CONFIG_PATH,
-): AiConfig | null {
-  return readLibrettoConfig(configPath).ai ?? null;
+): string | null {
+  return readLibrettoConfig(configPath).snapshotModel ?? null;
 }
 
-export function writeAiConfig(
+export function writeSnapshotModel(
   model: string,
   configPath: string = LIBRETTO_CONFIG_PATH,
-): AiConfig {
+): string {
   let librettoConfig: LibrettoConfig;
   try {
     librettoConfig = readLibrettoConfig(configPath);
@@ -150,27 +129,23 @@ export function writeAiConfig(
     // overwrite a broken file instead of throwing.
     librettoConfig = { version: CURRENT_CONFIG_VERSION };
   }
-  const ai = AiConfigSchema.parse({
-    model,
-    updatedAt: new Date().toISOString(),
-  });
   writeLibrettoConfig(
     {
       ...librettoConfig,
       version: CURRENT_CONFIG_VERSION,
-      ai,
+      snapshotModel: model,
     },
     configPath,
   );
-  return ai;
+  return model;
 }
 
-export function clearAiConfig(
+export function clearSnapshotModel(
   configPath: string = LIBRETTO_CONFIG_PATH,
 ): boolean {
   const librettoConfig = readLibrettoConfig(configPath);
-  if (!librettoConfig.ai) return false;
-  const { ai: _ai, ...rest } = librettoConfig;
+  if (!librettoConfig.snapshotModel) return false;
+  const { snapshotModel: _, ...rest } = librettoConfig;
   writeLibrettoConfig(
     {
       ...rest,

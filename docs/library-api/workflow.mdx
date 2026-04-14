@@ -42,7 +42,7 @@ type LibrettoWorkflowHandler<Input, Output> = (
 ```typescript theme={null}
 import { workflow, launchBrowser, pause } from "libretto";
 
-export const main = workflow<{ query: string }, string[]>(
+export default workflow<{ query: string }, string[]>(
   "main",
   async (ctx, input) => {
     const { page } = ctx;
@@ -63,20 +63,13 @@ export const main = workflow<{ query: string }, string[]>(
 
 #### Running with the CLI
 
-Pass the file path and the workflow's **runtime name** to `libretto run`. The runtime name is the `name` string you pass as the first argument to `workflow(name, handler)`, not the JavaScript export identifier:
+Pass the file path to `libretto run`. The file must have a default-exported `workflow()`:
 
 ```bash theme={null}
-npx libretto run ./my-workflow.ts main
+npx libretto run ./my-workflow.ts
 ```
 
 The CLI compiles the file with `tsx`, launches a Chromium browser, and calls your handler with the session context it constructs.
-
-<Note>
-  The CLI resolves workflows by their runtime `name` string, not by the JavaScript variable or export name. If you write `export const myExport = workflow("main", handler)`, the CLI argument must be `main`, not `myExport`.
-
-**Module discovery:** The CLI scans all exports from your file. It supports direct named exports (e.g. `export const foo = workflow(...)`), a special `workflows` export that is either a single workflow or an object map of workflows (e.g. `export const workflows = { foo, bar }`), and resolves the target workflow by matching the runtime `name` string across all discovered workflows.
-
-</Note>
 
 ---
 
@@ -139,7 +132,7 @@ async function launchBrowser(args: LaunchBrowserArgs): Promise<BrowserSession>;
 
 ```typescript theme={null}
 import { launchBrowser } from "libretto";
-import { main } from "./my-workflow";
+import main from "./my-workflow";
 
 const session = await launchBrowser({
   sessionName: "my-run",
@@ -192,7 +185,7 @@ npx libretto resume --session <session-name>
 ```typescript theme={null}
 import { workflow, pause } from "libretto";
 
-export const main = workflow<{ id: string }, void>(
+export default workflow<{ id: string }, void>(
   "main",
   async (ctx, input) => {
     const { page, session } = ctx;

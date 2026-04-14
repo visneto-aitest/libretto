@@ -13,13 +13,13 @@ Use this reference when you need to inspect or change the workspace configuratio
 Libretto reads workspace config from `.libretto/config.json`.
 
 - The file is created by `npx libretto setup` during first-time onboarding (auto-pins the default model for the detected provider) or by `npx libretto ai configure ...` for explicit overrides.
-- API credentials still come from your shell environment or `.env`. The config file stores the selected model, not the secret itself.
+- API credentials come from your shell environment or a `.env` file **at the repository root** (next to your `.git` directory). The config file stores the selected model, not the secret itself. Set `LIBRETTO_DISABLE_DOTENV=1` to skip `.env` loading (useful in CI).
 - Use `npx libretto status` to inspect the current AI configuration and open sessions without changing anything.
 - For first-time setup instructions, follow the main `SKILL.md` flow instead of expanding this reference.
 
 ## Supported Settings
 
-- `ai.model` selects the configured analysis model for `snapshot`.
+- `snapshotModel` selects the configured analysis model for `snapshot`.
 - `viewport` is an optional top-level setting used by `open` and `run` when you do not pass `--viewport`.
 - Viewport precedence is: CLI `--viewport`, then `.libretto/config.json`, then the default `1366x768`.
 - `sessionMode` sets the default session access mode for new sessions created by `open`, `connect`, and `run`. Must be `"read-only"` or `"write-access"`. When omitted, defaults to `"write-access"`. Pass `--read-only` or `--write-access` to `open`, `connect`, or `run` to override when creating a session.
@@ -29,10 +29,7 @@ Example:
 ```json
 {
   "version": 1,
-  "ai": {
-    "model": "openai/gpt-5.4",
-    "updatedAt": "2026-01-01T00:00:00.000Z"
-  },
+  "snapshotModel": "openai/gpt-5.4",
   "viewport": {
     "width": 1280,
     "height": 800
@@ -47,7 +44,7 @@ Example:
 npx libretto setup                                         # first-time onboarding, auto-pins default model
 npx libretto status                                        # inspect AI config and open sessions
 npx libretto ai configure openai                           # explicitly change provider/model
-npx libretto open https://app.example.com --viewport 1440x900
+npx libretto open https://example.com --viewport 1440x900
 npx libretto run ./integration.ts --viewport 1440x900
 ```
 

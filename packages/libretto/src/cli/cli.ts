@@ -19,7 +19,7 @@ function printSetupAudit(): void {
   const status = resolveAiSetupStatus();
   switch (status.kind) {
     case "ready":
-      console.log(`✓ AI model: ${status.model}`);
+      console.log(`✓ Snapshot model: ${status.model}`);
       break;
     case "configured-missing-credentials":
       console.log(

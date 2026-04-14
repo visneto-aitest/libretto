@@ -162,7 +162,7 @@ describe("basic CLI subprocess behavior", () => {
       workspacePath(".libretto", "config.json"),
       JSON.stringify({
         version: 1,
-        ai: { model: "openai/gpt-5.4", updatedAt: "2026-01-01T00:00:00.000Z" },
+        snapshotModel: "openai/gpt-5.4",
       }),
       "utf8",
     );
