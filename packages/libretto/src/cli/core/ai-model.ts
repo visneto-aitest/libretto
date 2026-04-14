@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { type AiConfig, readAiConfig } from "./config.js";
+import { readSnapshotModel } from "./config.js";
 import { LIBRETTO_CONFIG_PATH, REPO_ROOT } from "./context.js";
 import {
   hasProviderCredentials,
@@ -221,18 +221,18 @@ function inferAutoSnapshotModel(): SnapshotApiModelSelection | null {
  * Resolve which API model to use for snapshot analysis.
  *
  * Priority:
- * 1. Model from .libretto/config.json ai.model field (set via `ai configure`)
+ * 1. snapshotModel from .libretto/config.json (set via `ai configure`)
  * 2. Auto-detect from available API credentials in env
  */
 export function resolveSnapshotApiModel(
-  config: AiConfig | null = readAiConfig(),
+  snapshotModel: string | null = readSnapshotModel(),
 ): SnapshotApiModelSelection | null {
   loadSnapshotEnv();
 
-  if (config?.model) {
-    const { provider } = parseModel(config.model);
+  if (snapshotModel) {
+    const { provider } = parseModel(snapshotModel);
     return {
-      model: config.model,
+      model: snapshotModel,
       provider,
       source: "config",
     };
@@ -242,9 +242,9 @@ export function resolveSnapshotApiModel(
 }
 
 export function resolveSnapshotApiModelOrThrow(
-  config: AiConfig | null = readAiConfig(),
+  snapshotModel: string | null = readSnapshotModel(),
 ): SnapshotApiModelSelection {
-  const selection = resolveSnapshotApiModel(config);
+  const selection = resolveSnapshotApiModel(snapshotModel);
   if (!selection) {
     throw new SnapshotApiUnavailableError(noSnapshotApiConfiguredMessage());
   }
@@ -288,14 +288,14 @@ export type AiSetupStatus =
   | { kind: "unconfigured" };
 
 /**
- * Read AI config without throwing on invalid files.
- * Returns the config or an error message.
+ * Read snapshot model without throwing on invalid files.
+ * Returns the model string or an error message.
  */
-function readAiConfigSafely(
+function readSnapshotModelSafely(
   configPath: string,
-): { ok: true; config: AiConfig | null } | { ok: false; message: string } {
+): { ok: true; model: string | null } | { ok: false; message: string } {
   try {
-    return { ok: true, config: readAiConfig(configPath) };
+    return { ok: true, model: readSnapshotModel(configPath) };
   } catch (err) {
     return {
       ok: false,
@@ -312,25 +312,25 @@ function readAiConfigSafely(
  * that the throwing APIs collapse into errors.
  *
  * 1. If config read throws → `invalid-config`.
- * 2. If config has an `ai` block → check credentials for that provider.
- * 3. If no config or no `ai` block → auto-detect from env via existing resolver.
+ * 2. If config has a `snapshotModel` → check credentials for that provider.
+ * 3. If no `snapshotModel` → auto-detect from env via existing resolver.
  */
 export function resolveAiSetupStatus(
   configPath: string = LIBRETTO_CONFIG_PATH,
 ): AiSetupStatus {
   loadSnapshotEnv();
 
-  const configResult = readAiConfigSafely(configPath);
+  const result = readSnapshotModelSafely(configPath);
 
-  if (!configResult.ok) {
-    return { kind: "invalid-config", message: configResult.message };
+  if (!result.ok) {
+    return { kind: "invalid-config", message: result.message };
   }
 
-  // Config exists with an ai block — use it directly to check credentials
-  if (configResult.config) {
+  // Config has a snapshotModel — use it directly to check credentials
+  if (result.model) {
     let selection: SnapshotApiModelSelection | null;
     try {
-      selection = resolveSnapshotApiModel(configResult.config);
+      selection = resolveSnapshotApiModel(result.model);
     } catch (err) {
       return {
         kind: "invalid-config",
@@ -356,7 +356,7 @@ export function resolveAiSetupStatus(
     };
   }
 
-  // No ai config — fall back to env auto-detect via existing resolver
+  // No snapshotModel — fall back to env auto-detect via existing resolver
   const envSelection = resolveSnapshotApiModel(null);
   if (envSelection && hasProviderCredentials(envSelection.provider)) {
     return {

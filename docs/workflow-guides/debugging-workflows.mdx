@@ -58,7 +58,7 @@ When you have error output from a failed run (stack traces, log files, GCP logs,
 
     ```bash  theme={null}
     # What the agent runs
-    npx libretto run ./integration.ts main --session debug-flow --headed
+    npx libretto run ./integration.ts --session debug-flow --headed
     ```
 
     If you notice something useful (a popup that wasn't there before, a redesigned page), mention it to save the agent time.
@@ -87,7 +87,7 @@ When you have error output from a failed run (stack traces, log files, GCP logs,
     The agent re-runs the workflow headless to confirm the fix works.
 
     ```bash  theme={null}
-    npx libretto run ./integration.ts main --headless
+    npx libretto run ./integration.ts --headless
     ```
 
     If it fails again, the browser stays open and the agent repeats the diagnose/fix cycle.
@@ -102,7 +102,7 @@ If you need the workflow to stop at a specific point (not at failure, but at a k
 ```typescript theme={null}
 import { workflow, pause } from "libretto";
 
-export const eligibilityCheck = workflow(
+export default workflow(
   "eligibilityCheck",
   async (ctx, input) => {
     const { session, page } = ctx;

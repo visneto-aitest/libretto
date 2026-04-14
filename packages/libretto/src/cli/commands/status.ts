@@ -10,7 +10,7 @@ function printAiStatus(status: AiSetupStatus): void {
 
   switch (status.kind) {
     case "ready":
-      console.log(`  ✓ Model: ${status.model}`);
+      console.log(`  ✓ Snapshot model: ${status.model}`);
       if (status.source === "config") {
         console.log(`  Config: ${LIBRETTO_CONFIG_PATH}`);
       } else {

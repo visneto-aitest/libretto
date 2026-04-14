@@ -1,10 +1,9 @@
 import { z } from "zod";
 import {
   CURRENT_CONFIG_VERSION,
-  readAiConfig,
-  writeAiConfig,
-  clearAiConfig,
-  type AiConfig,
+  readSnapshotModel,
+  writeSnapshotModel,
+  clearSnapshotModel,
 } from "../core/config.js";
 import { LIBRETTO_CONFIG_PATH } from "../core/context.js";
 import { DEFAULT_SNAPSHOT_MODELS } from "../core/ai-model.js";
@@ -27,10 +26,9 @@ function formatConfigureProviders(separator = " | "): string {
   return CONFIGURE_PROVIDERS.join(separator);
 }
 
-function printAiConfig(config: AiConfig, configPath: string): void {
-  console.log(`Model: ${config.model}`);
+function printSnapshotModelConfig(model: string, configPath: string): void {
+  console.log(`Snapshot model: ${model}`);
   console.log(`Config file: ${configPath}`);
-  console.log(`Updated at: ${config.updatedAt}`);
 }
 
 /**
@@ -71,26 +69,26 @@ export function runAiConfigure(
   const presetArg = input.preset?.trim();
 
   if (!presetArg && !input.clear) {
-    const config = readAiConfig(configPath);
-    if (!config) {
+    const model = readSnapshotModel(configPath);
+    if (!model) {
       console.log(
-        `No AI config set. Choose a default model: ${configureCommandName} ${formatConfigureProviders()}`,
+        `No snapshot model set. Choose a default model: ${configureCommandName} ${formatConfigureProviders()}`,
       );
       console.log(
         "Provider credentials still come from your shell or .env file.",
       );
       return;
     }
-    printAiConfig(config, configPath);
+    printSnapshotModelConfig(model, configPath);
     return;
   }
 
   if (input.clear) {
-    const removed = clearAiConfig(configPath);
+    const removed = clearSnapshotModel(configPath);
     if (removed) {
-      console.log(`Cleared AI config: ${configPath}`);
+      console.log(`Cleared snapshot model config: ${configPath}`);
     } else {
-      console.log("No AI config was set.");
+      console.log("No snapshot model was set.");
     }
     return;
   }
@@ -107,9 +105,9 @@ export function runAiConfigure(
     );
   }
 
-  const config = writeAiConfig(model, configPath);
-  console.log("AI config saved.");
-  printAiConfig(config, configPath);
+  writeSnapshotModel(model, configPath);
+  console.log("Snapshot model saved.");
+  printSnapshotModelConfig(model, configPath);
 }
 
 export const aiConfigureInput = SimpleCLI.input({

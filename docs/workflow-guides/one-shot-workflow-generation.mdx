@@ -57,7 +57,7 @@ One-shot generation is the fastest way to go from an idea to a working automatio
       }>;
     };
 
-    export const freeStuff = workflow<{}, Output>(
+    export default workflow<{}, Output>(
       "freeStuff",
       async (ctx): Promise<Output> => {
         const { page } = ctx;
@@ -91,7 +91,7 @@ One-shot generation is the fastest way to go from an idea to a working automatio
 
     ```bash  theme={null}
     # What the agent runs
-    npx libretto run ./free-stuff.ts freeStuff --headless
+    npx libretto run ./free-stuff.ts --headless
     ```
 
     If the output is wrong, tell the agent what's off:

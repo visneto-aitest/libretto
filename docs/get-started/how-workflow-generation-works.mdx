@@ -45,7 +45,7 @@ The agent writes a TypeScript file that exports a `workflow()`:
 ```typescript theme={null}
 import { workflow } from "libretto";
 
-export const myWorkflow = workflow("myWorkflow", async (ctx) => {
+export default workflow("myWorkflow", async (ctx) => {
   const { page } = ctx;
   await page.goto("https://example.com");
   // ... automation steps
@@ -55,7 +55,7 @@ export const myWorkflow = workflow("myWorkflow", async (ctx) => {
 Then it runs the workflow headless to verify everything works end-to-end:
 
 ```bash theme={null}
-npx libretto run ./my-workflow.ts myWorkflow --headless
+npx libretto run ./my-workflow.ts --headless
 ```
 
 If the run fails, the browser stays open at the point of failure so the agent can inspect, fix, and retry without starting over.

@@ -75,7 +75,7 @@ Profiles save browser session state (cookies, localStorage, and other persistent
 1. Open the site in headed mode so you can log in manually:
 
    ```bash theme={null}
-   npx libretto open https://app.example.com --headed --session app-login
+   npx libretto open https://linkedin.com --headed --session app-login
    ```
 
 2. Log in to the site in the browser window.
@@ -83,7 +83,7 @@ Profiles save browser session state (cookies, localStorage, and other persistent
 3. Save the current session state as a profile:
 
    ```bash theme={null}
-   npx libretto save app.example.com --session app-login
+   npx libretto save linkedin.com --session app-login
    ```
 
 #### Using a profile
@@ -91,7 +91,7 @@ Profiles save browser session state (cookies, localStorage, and other persistent
 Pass `--auth-profile <domain>` to `run`:
 
 ```bash theme={null}
-npx libretto run ./integration.ts main --auth-profile app.example.com
+npx libretto run ./integration.ts --auth-profile linkedin.com
 ```
 
 <Warning>
