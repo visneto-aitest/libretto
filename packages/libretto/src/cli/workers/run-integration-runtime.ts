@@ -269,6 +269,16 @@ async function runIntegrationInternal(
     },
   });
 
+  // tsx/esbuild injects __name() wrappers when keepNames is true. Playwright
+  // serializes callbacks via Function#toString() into the browser context which
+  // lacks __name, causing ReferenceError. Inject a no-op polyfill into every page.
+  await browserSession.context.addInitScript(() => {
+    (globalThis as Record<string, unknown>).__name = (
+      target: unknown,
+      value: string,
+    ) => Object.defineProperty(target as object, "name", { value, configurable: true });
+  });
+
   const workflowContext: LibrettoWorkflowContext = {
     session: args.session,
     page: browserSession.page,
